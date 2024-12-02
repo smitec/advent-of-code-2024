@@ -1,5 +1,69 @@
 use std::{collections::HashMap, fs, iter::zip};
 
+enum LevelState {
+    Unknown,
+    Increasing,
+    Decreasing,
+}
+
+fn day2() {
+    let content = fs::read_to_string("./inputs/day2.txt").expect("Couldn't read input");
+
+    let mut safe = 0;
+
+    for line in content.lines() {
+        let mut state: LevelState = LevelState::Unknown;
+        let mut previous: Option<i32> = None;
+
+        safe += 1;
+
+        for c in line.split(" ") {
+            let val: i32 = c.parse().unwrap();
+            match state {
+                LevelState::Unknown => {
+                    if let Some(x) = previous {
+                        if val > x {
+                            state = LevelState::Increasing;
+                        } else if val < x {
+                            state = LevelState::Decreasing;
+                        } else {
+                            safe -= 1;
+                            break; // If they match
+                        }
+                    }
+                }
+                LevelState::Increasing => {
+                    if let Some(x) = previous {
+                        if val <= x {
+                            safe -= 1;
+                            break;
+                        }
+                    }
+                }
+                LevelState::Decreasing => {
+                    if let Some(x) = previous {
+                        if val >= x {
+                            safe -= 1;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if let Some(x) = previous {
+                if (val - x).abs() > 3 {
+                    safe -= 1;
+                    break;
+                }
+            }
+
+            previous = Some(val);
+        }
+    }
+
+    println!("{}", safe);
+}
+
 fn day1() {
     let content = fs::read_to_string("./inputs/day1.txt").expect("Couldn't read input");
 
@@ -40,5 +104,8 @@ fn day1() {
 }
 
 fn main() {
+    println!("day 1");
     day1();
+    println!("day 2");
+    day2();
 }
