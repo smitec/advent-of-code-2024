@@ -1,9 +1,62 @@
 use std::{collections::HashMap, fs, iter::zip};
 
+#[derive(Clone)]
 enum LevelState {
     Unknown,
     Increasing,
     Decreasing,
+}
+
+enum CheckState {
+    Match,
+    FailAt(usize),
+}
+
+fn check(items: Vec<i32>) -> CheckState {
+    let mut state: LevelState = LevelState::Unknown;
+    let mut new_state = LevelState::Unknown;
+    let mut previous: Option<i32> = None;
+
+    for (i, val) in items.iter().enumerate() {
+        match state {
+            LevelState::Unknown => {
+                if let Some(x) = previous {
+                    if *val > x {
+                        new_state = LevelState::Increasing;
+                    } else if *val < x {
+                        new_state = LevelState::Decreasing;
+                    } else {
+                        return CheckState::FailAt(i);
+                    }
+                }
+            }
+            LevelState::Increasing => {
+                if let Some(x) = previous {
+                    if *val <= x {
+                        return CheckState::FailAt(i);
+                    }
+                }
+            }
+            LevelState::Decreasing => {
+                if let Some(x) = previous {
+                    if *val >= x {
+                        return CheckState::FailAt(i);
+                    }
+                }
+            }
+        }
+
+        if let Some(x) = previous {
+            if (*val - x).abs() > 3 {
+                return CheckState::FailAt(i);
+            }
+        }
+
+        previous = Some(*val);
+        state = new_state.clone();
+    }
+
+    return CheckState::Match;
 }
 
 fn day2() {
@@ -12,52 +65,21 @@ fn day2() {
     let mut safe = 0;
 
     for line in content.lines() {
-        let mut state: LevelState = LevelState::Unknown;
-        let mut previous: Option<i32> = None;
-
-        safe += 1;
-
-        for c in line.split(" ") {
-            let val: i32 = c.parse().unwrap();
-            match state {
-                LevelState::Unknown => {
-                    if let Some(x) = previous {
-                        if val > x {
-                            state = LevelState::Increasing;
-                        } else if val < x {
-                            state = LevelState::Decreasing;
-                        } else {
-                            safe -= 1;
-                            break; // If they match
-                        }
-                    }
-                }
-                LevelState::Increasing => {
-                    if let Some(x) = previous {
-                        if val <= x {
-                            safe -= 1;
-                            break;
-                        }
-                    }
-                }
-                LevelState::Decreasing => {
-                    if let Some(x) = previous {
-                        if val >= x {
-                            safe -= 1;
-                            break;
-                        }
+        let items: Vec<i32> = line.split(" ").map(|x| x.parse().unwrap()).collect();
+        match check(items.clone()) {
+            CheckState::Match => {
+                safe += 1;
+            }
+            CheckState::FailAt(i) => {
+                for a in 0..items.len() {
+                    let mut rest = items.clone();
+                    rest.remove(a);
+                    if let CheckState::Match = check(rest) {
+                        safe += 1;
+                        break;
                     }
                 }
             }
-
-            if let Some(x) = previous {
-                if (val - x).abs() > 3 {
-                    safe -= 1;
-                    break;
-                }
-            }
-
-            previous = Some(val);
         }
     }
 
