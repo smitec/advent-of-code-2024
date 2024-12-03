@@ -1,5 +1,38 @@
 use std::{collections::HashMap, fs, iter::zip};
 
+use regex::Regex;
+
+fn day3() {
+    let content = fs::read_to_string("./inputs/day3.txt").expect("Couldn't read input");
+
+    let parent =
+        Regex::new(r#"(?<do>do\(\))|(?<mul>mul\([0-9]+,[0-9]+\))|(?<dont>don't\(\))"#).unwrap();
+    let matcher = Regex::new(r#"mul\(([0-9]+),([0-9]+)\)"#).unwrap();
+
+    let mut total = 0;
+    let mut on = true;
+
+    for line in content.lines() {
+        let _ = parent.captures_iter(line).for_each(|caps| {
+            if let Some(_) = caps.name("do") {
+                on = true;
+            } else if let Some(_) = caps.name("dont") {
+                on = false
+            } else if let Some(x) = caps.name("mul") {
+                if on {
+                    let cap = matcher.captures(x.as_str()).unwrap();
+                    let (_, [a, b]) = cap.extract();
+                    let ai: i32 = a.parse().unwrap();
+                    let bi: i32 = b.parse().unwrap();
+                    total += ai * bi;
+                }
+            }
+        });
+    }
+
+    println!("{:?}", total);
+}
+
 #[derive(Clone)]
 enum LevelState {
     Unknown,
@@ -130,4 +163,6 @@ fn main() {
     day1();
     println!("day 2");
     day2();
+    println!("day 3");
+    day3();
 }
