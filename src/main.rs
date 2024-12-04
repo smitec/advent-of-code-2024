@@ -2,6 +2,118 @@ use std::{collections::HashMap, fs, iter::zip};
 
 use regex::Regex;
 
+struct XmasBit {
+    c: char,
+    row: i32,
+    col: i32,
+    dr: i32,
+    dc: i32,
+}
+
+fn is_in_bounds(rows: i32, cols: i32, row: i32, col: i32) -> bool {
+    if row < 0 || col < 0 {
+        return false;
+    }
+
+    if row >= rows || col >= cols {
+        return false;
+    }
+
+    true
+}
+
+fn day4() {
+    let content = fs::read_to_string("./inputs/day4.txt").expect("Couldn't read input");
+
+    let mut lines: Vec<Vec<char>> = Vec::new();
+    let mut to_check: Vec<XmasBit> = Vec::new();
+    let mut rows = 0;
+    let mut cols = 0;
+
+    let rcs = vec![
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, 0),
+        (1, -1),
+    ];
+
+    for line in content.lines() {
+        cols = 0;
+        lines.push(
+            line.chars()
+                .map(|x| {
+                    if x == 'X' {
+                        rcs.iter().for_each(|e| {
+                            let (dr, dc) = e;
+                            to_check.push(XmasBit {
+                                c: 'X',
+                                row: rows,
+                                col: cols,
+                                dr: *dr,
+                                dc: *dc,
+                            });
+                        });
+                    }
+                    cols += 1;
+                    x
+                })
+                .collect(),
+        );
+        rows += 1;
+    }
+
+    let mut found = 0;
+
+    while let Some(elem) = to_check.pop() {
+        // Check Bounds
+        let new_r = elem.row + elem.dr;
+        let new_c = elem.col + elem.dc;
+
+        if !is_in_bounds(rows, cols, new_r, new_c) {
+            continue;
+        }
+
+        // Check Letter
+        let letter = lines[new_r as usize][new_c as usize];
+        match letter {
+            'M' => {
+                if elem.c == 'X' {
+                    to_check.push(XmasBit {
+                        c: 'M',
+                        row: new_r,
+                        col: new_c,
+                        dr: elem.dr,
+                        dc: elem.dc,
+                    });
+                }
+            }
+            'A' => {
+                if elem.c == 'M' {
+                    to_check.push(XmasBit {
+                        c: 'A',
+                        row: new_r,
+                        col: new_c,
+                        dr: elem.dr,
+                        dc: elem.dc,
+                    });
+                }
+            }
+            'S' => {
+                if elem.c == 'A' {
+                    found += 1;
+                }
+            }
+            _ => continue,
+        };
+    }
+
+    println!("{:?}", found);
+}
+
 fn day3() {
     let content = fs::read_to_string("./inputs/day3.txt").expect("Couldn't read input");
 
@@ -165,4 +277,6 @@ fn main() {
     day2();
     println!("day 3");
     day3();
+    println!("day 4");
+    day4();
 }
