@@ -27,6 +27,7 @@ fn day4() {
 
     let mut lines: Vec<Vec<char>> = Vec::new();
     let mut to_check: Vec<XmasBit> = Vec::new();
+    let mut to_check_b: Vec<XmasBit> = Vec::new();
     let mut rows = 0;
     let mut cols = 0;
 
@@ -56,6 +57,14 @@ fn day4() {
                                 dr: *dr,
                                 dc: *dc,
                             });
+                        });
+                    } else if x == 'A' {
+                        to_check_b.push(XmasBit {
+                            c: 'A',
+                            row: rows,
+                            col: cols,
+                            dr: 0,
+                            dc: 0,
                         });
                     }
                     cols += 1;
@@ -112,6 +121,33 @@ fn day4() {
     }
 
     println!("{:?}", found);
+
+    let mut found_b = 0;
+
+    while let Some(a) = to_check_b.pop() {
+        let mut diagonals = 0;
+        // Down Right
+        let both_offsets = vec![vec![(-1, -1), (1, 1)], vec![(-1, 1), (1, -1)]];
+        for offsets in both_offsets {
+            let mut items: String = "".to_string();
+            for offset in offsets {
+                let new_r = a.row + offset.0;
+                let new_c = a.col + offset.1;
+                if is_in_bounds(rows, cols, new_r, new_c) {
+                    items.push(lines[new_r as usize][new_c as usize]);
+                }
+            }
+
+            if items == "MS" || items == "SM" {
+                diagonals += 1;
+            }
+        }
+        if diagonals == 2 {
+            found_b += 1;
+        }
+    }
+
+    println!("{:?}", found_b);
 }
 
 fn day3() {
