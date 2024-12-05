@@ -1,6 +1,94 @@
-use std::{collections::HashMap, fs, iter::zip};
+use std::{cmp::Ordering, collections::HashMap, fs, iter::zip, usize};
 
 use regex::Regex;
+use tracing::{debug, info, instrument};
+
+fn day5() {
+    let content = fs::read_to_string("./inputs/day5.txt").expect("Couldn't read input");
+
+    // Constraints in the form X|Y
+    // <blank line>
+    // Comma Separated Values
+    //
+    // X must be left of Y in the lists.
+    // i.e. Fail if Y is right of X
+    // Store a list of all values not allowed to be right of X
+
+    let mut constraints: HashMap<i32, Vec<i32>> = HashMap::new();
+    let mut lists: Vec<Vec<i32>> = Vec::new();
+    let mut parsing_contstraints = true;
+
+    for line in content.lines() {
+        if line.len() == 0 {
+            parsing_contstraints = false;
+            continue;
+        }
+
+        if parsing_contstraints {
+            let (a, b) = line.split_once('|').unwrap();
+            let a_p: i32 = a.parse().unwrap();
+            let b_p: i32 = b.parse().unwrap();
+
+            constraints
+                .entry(a_p)
+                .and_modify(|v| v.push(b_p))
+                .or_insert(vec![b_p]);
+        } else {
+            lists.push(line.split(',').map(|x| x.parse().unwrap()).collect());
+        }
+    }
+
+    let mut total = 0;
+    let mut b_total = 0;
+
+    for list in lists {
+        let mut clean = true;
+        for (i, item) in list.iter().enumerate() {
+            let d = constraints.get(&item);
+            if let Some(right) = d {
+                for check in right {
+                    if list[..i].contains(check) {
+                        clean = false;
+                        break;
+                    }
+                }
+            }
+            if !clean {
+                break;
+            }
+        }
+        if clean {
+            let half = (list.len() as f32 / 2.0).floor();
+            total += list[half as usize];
+        } else {
+            let mut sorted = list.clone();
+            sorted.sort_by(|a, b| {
+                // Check for Greater
+                let d = constraints.get(a);
+                if let Some(right) = d {
+                    if right.contains(b) {
+                        return Ordering::Greater;
+                    }
+                }
+
+                // Check for Lesser
+                let d = constraints.get(b);
+                if let Some(right) = d {
+                    if right.contains(a) {
+                        return Ordering::Less;
+                    }
+                }
+
+                Ordering::Equal
+            });
+            let half = (sorted.len() as f32 / 2.0).floor();
+            b_total += sorted[half as usize];
+        }
+    }
+
+    info!("Final Total Part A {:?}", total);
+    info!("Final Total Part B {:?}", b_total);
+}
 
 struct XmasBit {
     c: char,
@@ -307,6 +395,11 @@ fn day1() {
 }
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+    info!("Tracing Setup");
+    /*
     println!("day 1");
     day1();
     println!("day 2");
@@ -315,4 +408,7 @@ fn main() {
     day3();
     println!("day 4");
     day4();
+    */
+    println!("day 5");
+    day5();
 }
