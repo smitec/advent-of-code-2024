@@ -2,6 +2,7 @@ use std::{cmp::Ordering, collections::HashMap, fs, iter::zip, usize};
 
 use regex::Regex;
 use tracing::{debug, info, instrument};
+use tracing_subscriber::EnvFilter;
 
 fn day5() {
     let content = fs::read_to_string("./inputs/day5.txt").expect("Couldn't read input");
@@ -396,7 +397,7 @@ fn day1() {
 
 fn main() {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter(EnvFilter::from_default_env())
         .init();
     info!("Tracing Setup");
     /*
