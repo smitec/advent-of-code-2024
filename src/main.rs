@@ -10,6 +10,50 @@ use regex::Regex;
 use tracing::{debug, field::debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
+#[instrument]
+fn try_math(target: i64, current: i64, parts: &[i64]) -> bool {
+    if parts.len() == 0 {
+        return false;
+    }
+
+    if current > target {
+        return false;
+    }
+
+    let next = parts[0];
+
+    if parts.len() == 1 {
+        return current * next == target || current + next == target;
+    } else {
+        return try_math(target, current * next, &parts[1..])
+            || try_math(target, current + next, &parts[1..]);
+    }
+}
+
+#[instrument]
+fn day7(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
+
+    let mut inputs: Vec<(i64, Vec<i64>)> = Vec::new();
+
+    for line in content.lines() {
+        let (target, rest) = line.split_once(": ").unwrap();
+        let parts: Vec<i64> = rest.split(' ').map(|x| x.parse().unwrap()).collect();
+
+        inputs.push((target.parse().unwrap(), parts));
+    }
+
+    let mut total = 0;
+
+    for (target, parts) in inputs {
+        if try_math(target, parts[0], &parts[1..]) {
+            total += target;
+        }
+    }
+
+    info!("Final Total {:?}", total);
+}
+
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 enum Direction {
     North,
@@ -585,8 +629,11 @@ fn main() {
     day4();
     println!("day 5");
     day5();
-    */
     println!("day 6");
     day6("./inputs/day6small.txt".to_string());
     day6("./inputs/day6.txt".to_string());
+    */
+    println!("day 7");
+    day7("./inputs/day7small.txt".to_string());
+    day7("./inputs/day7.txt".to_string());
 }
