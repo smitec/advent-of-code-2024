@@ -1,8 +1,157 @@
-use std::{cmp::Ordering, collections::HashMap, fs, iter::zip, usize};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    fs,
+    iter::zip,
+    usize,
+};
 
 use regex::Regex;
 use tracing::{debug, info, instrument};
 use tracing_subscriber::EnvFilter;
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+enum Direction {
+    North,
+    East,
+    West,
+    South,
+}
+
+#[derive(Debug)]
+enum Rotation {
+    Left,
+    Right,
+}
+
+#[instrument]
+fn move_direction(start: &(i32, i32), direction: &Direction) -> (i32, i32) {
+    match direction {
+        Direction::North => (start.0 - 1, start.1),
+        Direction::East => (start.0, start.1 + 1),
+        Direction::West => (start.0, start.1 - 1),
+        Direction::South => (start.0 + 1, start.1),
+    }
+}
+
+#[instrument]
+fn turn(direction: &Direction, rotation: Rotation) -> Direction {
+    match direction {
+        Direction::North => match rotation {
+            Rotation::Left => {
+                return Direction::West;
+            }
+            Rotation::Right => {
+                return Direction::East;
+            }
+        },
+        Direction::East => match rotation {
+            Rotation::Left => {
+                return Direction::North;
+            }
+            Rotation::Right => {
+                return Direction::South;
+            }
+        },
+        Direction::West => match rotation {
+            Rotation::Left => {
+                return Direction::South;
+            }
+            Rotation::Right => {
+                return Direction::North;
+            }
+        },
+        Direction::South => match rotation {
+            Rotation::Left => {
+                return Direction::East;
+            }
+            Rotation::Right => {
+                return Direction::West;
+            }
+        },
+    }
+}
+
+#[derive(Eq, Hash, PartialEq)]
+struct Bearing {
+    pos: (i32, i32),
+    d: Direction,
+}
+
+#[instrument]
+fn is_in_bounds(rows: i32, cols: i32, row: i32, col: i32) -> bool {
+    if row < 0 || col < 0 {
+        return false;
+    }
+
+    if row >= rows || col >= cols {
+        return false;
+    }
+
+    true
+}
+
+#[instrument]
+fn day6() {
+    let content = fs::read_to_string("./inputs/day6.txt").expect("Couldn't read input");
+
+    let mut map: HashSet<(i32, i32)> = HashSet::new();
+    let mut rows: i32 = 0;
+    let mut cols: i32 = 0;
+
+    let mut position: Bearing = Bearing {
+        pos: (-1, -1),
+        d: Direction::North,
+    };
+
+    for line in content.lines() {
+        cols = line.len() as i32;
+        for (i, c) in line.chars().enumerate() {
+            match c {
+                '#' => {
+                    map.insert((rows, i as i32));
+                }
+                '^' => {
+                    position = Bearing {
+                        pos: (rows, i as i32),
+                        d: Direction::North,
+                    };
+                }
+                _ => {}
+            };
+        }
+        rows += 1;
+    }
+
+    let mut visited_pos: HashSet<(i32, i32)> = HashSet::new();
+
+    loop {
+        // Try Move
+        let mut new_pos = move_direction(&position.pos, &position.d);
+
+        let new_direction: Direction;
+        if map.contains(&new_pos) {
+            // Turn Right but don't move
+            new_direction = turn(&position.d, Rotation::Right);
+            new_pos = position.pos.clone();
+        } else {
+            new_direction = position.d.clone();
+        }
+
+        if !is_in_bounds(rows, cols, position.pos.0, position.pos.1) {
+            break;
+        }
+
+        visited_pos.insert(position.pos.clone());
+
+        position = Bearing {
+            pos: new_pos,
+            d: new_direction,
+        };
+    }
+
+    info!("Total Visited Locations {:?}", visited_pos.len());
+}
 
 fn day5() {
     let content = fs::read_to_string("./inputs/day5.txt").expect("Couldn't read input");
@@ -97,18 +246,6 @@ struct XmasBit {
     col: i32,
     dr: i32,
     dc: i32,
-}
-
-fn is_in_bounds(rows: i32, cols: i32, row: i32, col: i32) -> bool {
-    if row < 0 || col < 0 {
-        return false;
-    }
-
-    if row >= rows || col >= cols {
-        return false;
-    }
-
-    true
 }
 
 fn day4() {
@@ -409,7 +546,9 @@ fn main() {
     day3();
     println!("day 4");
     day4();
-    */
     println!("day 5");
     day5();
+    */
+    println!("day 6");
+    day6();
 }
