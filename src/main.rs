@@ -7,7 +7,7 @@ use std::{
 };
 
 use regex::Regex;
-use tracing::{debug, info, instrument};
+use tracing::{debug, field::debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
@@ -72,7 +72,7 @@ fn turn(direction: &Direction, rotation: Rotation) -> Direction {
     }
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Clone)]
 struct Bearing {
     pos: (i32, i32),
     d: Direction,
@@ -92,8 +92,8 @@ fn is_in_bounds(rows: i32, cols: i32, row: i32, col: i32) -> bool {
 }
 
 #[instrument]
-fn day6() {
-    let content = fs::read_to_string("./inputs/day6.txt").expect("Couldn't read input");
+fn day6(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
 
     let mut map: HashSet<(i32, i32)> = HashSet::new();
     let mut rows: i32 = 0;
@@ -125,6 +125,8 @@ fn day6() {
 
     let mut visited_pos: HashSet<(i32, i32)> = HashSet::new();
 
+    let mut additions: HashSet<(i32, i32)> = HashSet::new();
+
     loop {
         // Try Move
         let mut new_pos = move_direction(&position.pos, &position.d);
@@ -136,10 +138,44 @@ fn day6() {
             new_pos = position.pos.clone();
         } else {
             new_direction = position.d.clone();
-        }
 
-        if !is_in_bounds(rows, cols, position.pos.0, position.pos.1) {
-            break;
+            if !is_in_bounds(rows, cols, position.pos.0, position.pos.1) {
+                break;
+            }
+
+            let fake_blocker = move_direction(&position.pos, &position.d);
+
+            if is_in_bounds(rows, cols, fake_blocker.0, fake_blocker.1)
+                && !visited_pos.contains(&fake_blocker)
+            {
+                let mut test_bearing = Bearing {
+                    pos: position.pos.clone(),
+                    d: turn(&position.d, Rotation::Right),
+                };
+                // Need to store the extra locations
+                let mut test_visited: HashSet<Bearing> = HashSet::new();
+                loop {
+                    // If OOB Break
+                    if !is_in_bounds(rows, cols, test_bearing.pos.0, test_bearing.pos.1) {
+                        break;
+                    }
+
+                    if test_visited.contains(&test_bearing) {
+                        additions.insert(fake_blocker.clone());
+                        break;
+                    }
+
+                    test_visited.insert(test_bearing.clone());
+
+                    let test_pos = move_direction(&test_bearing.pos, &test_bearing.d);
+
+                    if map.contains(&test_pos) || test_pos == fake_blocker {
+                        test_bearing.d = turn(&test_bearing.d, Rotation::Right);
+                    } else {
+                        test_bearing.pos = test_pos;
+                    }
+                }
+            }
         }
 
         visited_pos.insert(position.pos.clone());
@@ -151,6 +187,7 @@ fn day6() {
     }
 
     info!("Total Visited Locations {:?}", visited_pos.len());
+    info!("Total Potential Additions {:?}", additions.len());
 }
 
 fn day5() {
@@ -550,5 +587,6 @@ fn main() {
     day5();
     */
     println!("day 6");
-    day6();
+    day6("./inputs/day6small.txt".to_string());
+    day6("./inputs/day6.txt".to_string());
 }
