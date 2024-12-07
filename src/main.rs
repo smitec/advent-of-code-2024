@@ -11,7 +11,7 @@ use tracing::{debug, field::debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
 #[instrument]
-fn try_math(target: i64, current: i64, parts: &[i64]) -> bool {
+fn try_math(target: i64, current: i64, parts: &[i64], can_concat: bool) -> bool {
     if parts.len() == 0 {
         return false;
     }
@@ -23,10 +23,22 @@ fn try_math(target: i64, current: i64, parts: &[i64]) -> bool {
     let next = parts[0];
 
     if parts.len() == 1 {
-        return current * next == target || current + next == target;
+        let no_concat = current * next == target || current + next == target;
+        if can_concat {
+            let cc: i64 = (current.to_string() + &next.to_string()).parse().unwrap();
+            return (cc == target) || no_concat;
+        } else {
+            return no_concat;
+        }
     } else {
-        return try_math(target, current * next, &parts[1..])
-            || try_math(target, current + next, &parts[1..]);
+        let no_concat = try_math(target, current * next, &parts[1..], can_concat)
+            || try_math(target, current + next, &parts[1..], can_concat);
+        if can_concat {
+            let cc: i64 = (current.to_string() + &next.to_string()).parse().unwrap();
+            return try_math(target, cc, &parts[1..], can_concat) || no_concat;
+        } else {
+            return no_concat;
+        }
     }
 }
 
@@ -44,14 +56,19 @@ fn day7(filename: String) {
     }
 
     let mut total = 0;
+    let mut total_b = 0;
 
     for (target, parts) in inputs {
-        if try_math(target, parts[0], &parts[1..]) {
+        if try_math(target, parts[0], &parts[1..], false) {
             total += target;
+        }
+        if try_math(target, parts[0], &parts[1..], true) {
+            total_b += target;
         }
     }
 
     info!("Final Total {:?}", total);
+    info!("Final Total B {:?}", total_b);
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
