@@ -34,6 +34,7 @@ fn day8(filename: String) {
 
     // For each node type, check each node against each other node
     let mut antinodes: HashSet<(i32, i32)> = HashSet::new();
+    let mut antinodes_all: HashSet<(i32, i32)> = HashSet::new();
     for (_, node) in nodes.iter() {
         for (i, (a, b)) in node.iter().enumerate() {
             for (j, (c, d)) in node.iter().enumerate() {
@@ -46,11 +47,24 @@ fn day8(filename: String) {
                     //debug!("Found {:?}", (x, y));
                     antinodes.insert((x, y));
                 }
+
+                let dx = c - a;
+                let dy = d - b;
+
+                for copy in 1..rows {
+                    let x = a + copy * dx;
+                    let y = b + copy * dy;
+                    if is_in_bounds(rows, cols, x, y) {
+                        //debug!("Found {:?}", (x, y));
+                        antinodes_all.insert((x, y));
+                    }
+                }
             }
         }
     }
 
     info!("Total Antinodes {:?}", antinodes.len());
+    info!("Total Antinodes B {:?}", antinodes_all.len());
 }
 
 #[instrument]
