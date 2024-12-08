@@ -11,6 +11,49 @@ use tracing::{debug, field::debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
 #[instrument]
+fn day8(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
+
+    let mut nodes: HashMap<char, Vec<(i32, i32)>> = HashMap::new();
+    let mut rows: i32 = 0;
+    let mut cols: i32 = 0;
+
+    for (row, line) in content.lines().enumerate() {
+        cols = line.len() as i32;
+        rows += 1;
+        for (col, c) in line.chars().enumerate() {
+            if c == '.' {
+                continue;
+            }
+            nodes
+                .entry(c)
+                .and_modify(|x| x.push((row as i32, col as i32)))
+                .or_insert(vec![(row as i32, col as i32)]);
+        }
+    }
+
+    // For each node type, check each node against each other node
+    let mut antinodes: HashSet<(i32, i32)> = HashSet::new();
+    for (_, node) in nodes.iter() {
+        for (i, (a, b)) in node.iter().enumerate() {
+            for (j, (c, d)) in node.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
+                let x = 2 * c - a;
+                let y = 2 * d - b;
+                if is_in_bounds(rows, cols, x, y) {
+                    //debug!("Found {:?}", (x, y));
+                    antinodes.insert((x, y));
+                }
+            }
+        }
+    }
+
+    info!("Total Antinodes {:?}", antinodes.len());
+}
+
+#[instrument]
 fn try_math(target: i64, current: i64, parts: &[i64], can_concat: bool) -> bool {
     if parts.len() == 0 {
         return false;
@@ -649,8 +692,11 @@ fn main() {
     println!("day 6");
     day6("./inputs/day6small.txt".to_string());
     day6("./inputs/day6.txt".to_string());
-    */
     println!("day 7");
     day7("./inputs/day7small.txt".to_string());
     day7("./inputs/day7.txt".to_string());
+    */
+    println!("day 8");
+    day8("./inputs/day8small.txt".to_string());
+    day8("./inputs/day8.txt".to_string());
 }
