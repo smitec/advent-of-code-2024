@@ -10,6 +10,96 @@ use regex::Regex;
 use tracing::{debug, field::debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
+#[derive(Debug, Clone)]
+struct Chunk {
+    start: usize,
+    id: i64,
+    length: usize,
+}
+
+#[instrument]
+fn day9(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
+
+    let mut chunks: Vec<Chunk> = Vec::new();
+    let mut id = 0;
+    let mut offset = 0;
+    let mut is_file = true;
+
+    for c in content.chars() {
+        if c == '\n' {
+            break;
+        }
+
+        let size: usize = c.to_string().parse().unwrap();
+        if is_file {
+            if size > 0 {
+                chunks.push(Chunk {
+                    start: offset,
+                    id: id,
+                    length: size,
+                });
+                id += 1;
+                offset += size;
+            }
+            is_file = false;
+        } else {
+            offset += size;
+            is_file = true;
+        }
+    }
+
+    let mut checksum: u64 = 0;
+
+    let mut cursor_left = 0;
+    let mut offset_left: usize = 0;
+
+    let mut cursor_right = offset;
+    let mut offset_right: usize = 0;
+
+    loop {
+        let current = chunks[offset_left].clone();
+        let next = chunks[&offset_left + 1].clone();
+
+        debug!(cursor_left, cursor_right);
+        debug!(next.start);
+
+        // Are we in current or between current and next
+        if cursor_left < current.start + current.length {
+            // Still in current
+            checksum += cursor_left as u64 * current.id as u64;
+            cursor_left += 1;
+        } else if cursor_left < next.start {
+            // In a gap
+
+            let back_current = chunks[chunks.len() - 1 - offset_right].clone();
+
+            checksum += cursor_left as u64 * back_current.id as u64;
+
+            cursor_right -= 1;
+
+            if cursor_right <= back_current.start {
+                let back_next = chunks[chunks.len() - 2 - offset_right].clone();
+                cursor_right = back_next.start + back_next.length; // TODO: plus one?
+                offset_right += 1;
+            }
+
+            cursor_left += 1;
+        }
+
+        if cursor_left == next.start {
+            offset_left += 1;
+        }
+
+        // If left passed right, break
+        if cursor_left == cursor_right {
+            break;
+        }
+    }
+
+    info!("Total Checksum {:?}", checksum);
+}
+
 #[instrument]
 fn day8(filename: String) {
     let content = fs::read_to_string(filename).expect("Couldn't read input");
@@ -709,8 +799,11 @@ fn main() {
     println!("day 7");
     day7("./inputs/day7small.txt".to_string());
     day7("./inputs/day7.txt".to_string());
-    */
     println!("day 8");
     day8("./inputs/day8small.txt".to_string());
     day8("./inputs/day8.txt".to_string());
+    */
+    println!("day 9");
+    day9("./inputs/day9small.txt".to_string());
+    day9("./inputs/day9.txt".to_string());
 }
