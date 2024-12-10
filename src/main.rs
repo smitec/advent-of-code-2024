@@ -8,13 +8,56 @@ use std::{
 
 use regex::Regex;
 use tracing::{debug, field::debug, info, instrument};
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, field::debug};
 
 #[derive(Debug, Clone)]
 struct Chunk {
     start: usize,
     id: i64,
     length: usize,
+}
+
+fn defrag(chunks: Vec<Chunk>) -> Vec<Chunk> {
+    let mut known: usize = chunks.len() - 1;
+    let mut chunky = chunks.clone();
+
+    // Not convinced this will always go through the chunks by file ID in order
+    let mut moved: HashSet<i64> = HashSet::new();
+
+    while known > 0 {
+        let elem = chunky[known].clone();
+        if !moved.contains(&elem.id) {
+            debug!("Searching for a gap for {:?}", elem.id);
+            moved.insert(chunky[known].id);
+
+            let mut set = false;
+            for i in 0..chunks.len() - 1 {
+                let first = chunky[i].clone();
+                let second = chunky[i + 1].clone();
+                let gap = second.start - (first.start + first.length);
+                debug!(
+                    "Gap Between {:?} and {:?} is {:?} needs to be <= {:?}",
+                    first.id, second.id, gap, elem.length
+                );
+
+                if elem.length <= gap && first.start + first.length < elem.start {
+                    chunky[known].start = first.start + first.length;
+                    debug!("Moving {:?} to {:?}", chunky[known].id, chunky[known].start);
+                    set = true;
+                    break;
+                }
+            }
+            chunky.sort_by(|a, b| a.start.cmp(&b.start));
+            if !set {
+                known -= 1;
+            }
+        } else {
+            known -= 1;
+        }
+    }
+
+    chunky.sort_by(|a, b| a.start.cmp(&b.start));
+    chunky
 }
 
 #[instrument]
@@ -54,50 +97,68 @@ fn day9(filename: String) {
     let mut cursor_left = 0;
     let mut offset_left: usize = 0;
 
-    let mut cursor_right = offset;
+    let mut cursor_right = chunks[chunks.len() - 1].start + chunks[chunks.len() - 1].length - 1;
     let mut offset_right: usize = 0;
 
     loop {
         let current = chunks[offset_left].clone();
-        let next = chunks[&offset_left + 1].clone();
-
-        debug!(cursor_left, cursor_right);
-        debug!(next.start);
 
         // Are we in current or between current and next
         if cursor_left < current.start + current.length {
             // Still in current
-            checksum += cursor_left as u64 * current.id as u64;
+            let add = cursor_left as u64 * current.id as u64;
+            checksum += add;
+            debug!(current.id, cursor_left, add, checksum);
             cursor_left += 1;
-        } else if cursor_left < next.start {
-            // In a gap
+        } else {
+            if offset_left + 1 == chunks.len() {
+                break;
+            }
+            let next = chunks[&offset_left + 1].clone();
+            if cursor_left < next.start {
+                // In a gap
 
-            let back_current = chunks[chunks.len() - 1 - offset_right].clone();
+                let back_current = chunks[chunks.len() - 1 - offset_right].clone();
 
-            checksum += cursor_left as u64 * back_current.id as u64;
+                let add = cursor_left as u64 * back_current.id as u64;
+                checksum += add;
+                debug!(back_current.id, cursor_left, add, checksum);
 
-            cursor_right -= 1;
+                cursor_right -= 1;
 
-            if cursor_right <= back_current.start {
-                let back_next = chunks[chunks.len() - 2 - offset_right].clone();
-                cursor_right = back_next.start + back_next.length; // TODO: plus one?
-                offset_right += 1;
+                if cursor_right < back_current.start {
+                    let back_next = chunks[chunks.len() - 2 - offset_right].clone();
+                    cursor_right = back_next.start + back_next.length - 1;
+                    offset_right += 1;
+                }
+
+                cursor_left += 1;
             }
 
-            cursor_left += 1;
-        }
-
-        if cursor_left == next.start {
-            offset_left += 1;
+            if cursor_left == next.start {
+                offset_left += 1;
+            }
         }
 
         // If left passed right, break
-        if cursor_left == cursor_right {
+        if cursor_left > cursor_right {
             break;
         }
     }
 
     info!("Total Checksum {:?}", checksum);
+
+    chunks = defrag(chunks);
+    info!("Defragment Complete");
+
+    let mut checksum_two: u64 = 0;
+    for chunk in chunks {
+        for p in chunk.start..chunk.start + chunk.length {
+            checksum_two += p as u64 * chunk.id as u64;
+        }
+    }
+
+    info!("Total Checksum B {:?}", checksum_two);
 }
 
 #[instrument]
