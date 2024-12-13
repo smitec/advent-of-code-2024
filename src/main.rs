@@ -7,8 +7,64 @@ use std::{
 };
 
 use regex::Regex;
-use tracing::{debug, field::debug, info, instrument};
-use tracing_subscriber::{EnvFilter, field::debug};
+use tracing::{debug, info, instrument};
+use tracing_subscriber::EnvFilter;
+
+const LURD: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, 1), (0, -1)];
+
+struct Step {
+    pos: (i32, i32),
+    val: i32,
+}
+
+#[instrument]
+fn day10(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
+
+    let mut starts: Vec<(i32, i32)> = Vec::new();
+    let mut map: HashMap<(i32, i32), i32> = HashMap::new();
+
+    for (r, line) in content.lines().enumerate() {
+        for (c, char) in line.chars().enumerate() {
+            let parsed: i32 = char.to_string().parse().unwrap();
+            map.insert((r as i32, c as i32), parsed);
+            if parsed == 0 {
+                starts.push((r as i32, c as i32));
+            }
+        }
+    }
+
+    let mut score = 0;
+    debug!("Got {:?} Trailheds to Check", starts.len());
+    for start in starts.iter() {
+        let mut to_check: Vec<Step> = Vec::new();
+        let mut end_points: HashSet<(i32, i32)> = HashSet::new();
+        to_check.push(Step {
+            pos: *start,
+            val: 0,
+        });
+
+        while let Some(x) = to_check.pop() {
+            if x.val == 9 {
+                end_points.insert(x.pos);
+                continue;
+            }
+
+            for (dr, dc) in LURD {
+                let test = (x.pos.0 + dr, x.pos.1 + dc);
+                if let Some(v) = map.get(&test) {
+                    if *v == x.val + 1 {
+                        to_check.push(Step { pos: test, val: *v });
+                    }
+                }
+            }
+        }
+
+        score += end_points.len();
+    }
+
+    info!("Final Score {:?}", score);
+}
 
 #[derive(Debug, Clone)]
 struct Chunk {
@@ -863,8 +919,11 @@ fn main() {
     println!("day 8");
     day8("./inputs/day8small.txt".to_string());
     day8("./inputs/day8.txt".to_string());
-    */
     println!("day 9");
     day9("./inputs/day9small.txt".to_string());
     day9("./inputs/day9.txt".to_string());
+    */
+    println!("day 10");
+    day10("./inputs/day10small.txt".to_string());
+    day10("./inputs/day10.txt".to_string());
 }
