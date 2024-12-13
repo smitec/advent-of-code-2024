@@ -35,6 +35,7 @@ fn day10(filename: String) {
     }
 
     let mut score = 0;
+    let mut routes = 0;
     debug!("Got {:?} Trailheds to Check", starts.len());
     for start in starts.iter() {
         let mut to_check: Vec<Step> = Vec::new();
@@ -47,6 +48,7 @@ fn day10(filename: String) {
         while let Some(x) = to_check.pop() {
             if x.val == 9 {
                 end_points.insert(x.pos);
+                routes += 1;
                 continue;
             }
 
@@ -64,6 +66,7 @@ fn day10(filename: String) {
     }
 
     info!("Final Score {:?}", score);
+    info!("Final Rating {:?}", routes);
 }
 
 #[derive(Debug, Clone)]
