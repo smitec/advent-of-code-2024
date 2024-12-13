@@ -10,40 +10,48 @@ use regex::Regex;
 use tracing::{debug, info, instrument};
 use tracing_subscriber::{EnvFilter, field::debug};
 
-#[instrument(skip(stones))]
-fn split_stones(stones: Vec<u64>, n: u64, target: u64) -> Vec<u64> {
-    debug!("a");
-    let mut next_stones: Vec<u64> = Vec::new();
-    for stone in stones {
-        if n == target {
-            if stone == 0 {
-                next_stones.push(1);
-            } else if stone.to_string().len() % 2 == 0 {
-                let mut stone_string = stone.to_string();
-                let a = stone_string.split_off(stone_string.len() / 2);
-                next_stones.push(stone_string.parse().unwrap());
-                next_stones.push(a.parse().unwrap());
+#[instrument]
+fn split_stones(stone: u64, n: u64, cache: &mut HashMap<(u64, u64), u64>) -> u64 {
+    if n == 0 {
+        return 1;
+    } else {
+        if stone == 0 {
+            if let Some(x) = cache.get(&(1, n - 1)) {
+                return *x;
             } else {
-                next_stones.push(stone * 2024);
+                let val = split_stones(1, n - 1, cache);
+                cache.insert((1, n - 1), val);
+                return val;
             }
+        } else if stone.to_string().len() % 2 == 0 {
+            let mut stone_string = stone.to_string();
+            let a = stone_string.split_off(stone_string.len() / 2);
+
+            let mut parts = 0;
+            for part in [
+                stone_string.parse::<u64>().unwrap(),
+                a.parse::<u64>().unwrap(),
+            ] {
+                if let Some(x) = cache.get(&(part, n - 1)) {
+                    parts += *x;
+                } else {
+                    let val = split_stones(part, n - 1, cache);
+                    cache.insert((part, n - 1), val);
+                    parts += val;
+                }
+            }
+
+            return parts;
         } else {
-            if stone == 0 {
-                next_stones.append(&mut split_stones(vec![1], n + 1, target));
-            } else if stone.to_string().len() % 2 == 0 {
-                let mut stone_string = stone.to_string();
-                let a = stone_string.split_off(stone_string.len() / 2);
-                next_stones.append(&mut split_stones(
-                    vec![stone_string.parse().unwrap()],
-                    n + 1,
-                    target,
-                ));
-                next_stones.append(&mut split_stones(vec![a.parse().unwrap()], n + 1, target));
+            if let Some(x) = cache.get(&(stone * 2024, n - 1)) {
+                return *x;
             } else {
-                next_stones.append(&mut split_stones(vec![stone * 2024], n + 1, target));
+                let val = split_stones(stone * 2024, n - 1, cache);
+                cache.insert((stone * 2024, n - 1), val);
+                return val;
             }
         }
     }
-    return next_stones;
 }
 
 #[instrument]
@@ -56,33 +64,17 @@ fn day11(filename: String) {
         .map(|x| x.parse().unwrap())
         .collect();
 
-    for i in 0..25 {
-        let mut next_stones: Vec<u64> = Vec::new();
-
-        for stone in stones {
-            if stone == 0 {
-                next_stones.push(1);
-            } else if stone.to_string().len() % 2 == 0 {
-                let mut stone_string = stone.to_string();
-                let a = stone_string.split_off(stone_string.len() / 2);
-                next_stones.push(stone_string.parse().unwrap());
-                next_stones.push(a.parse().unwrap());
-            } else {
-                next_stones.push(stone * 2024);
-            }
-        }
-
-        stones = next_stones;
-    }
-
-    info!("Final Stones {:?}", stones.len());
+    stones.sort();
 
     // Maps (current_value, n_steps) -> Number of Stones
     let mut cache: HashMap<(u64, u64), u64> = HashMap::new();
-    info!(
-        "Final Stones Recursive {:?}",
-        split_stones(stones, 1, 25).len()
-    );
+    let mut total = 0;
+
+    for stone in &stones {
+        total += split_stones(*stone, 75, &mut cache);
+        debug!("Finished {:?} Cache Size {:?}", stone, cache.len());
+    }
+    info!("Final Stones Recursive {:?}", total);
 }
 
 const LURD: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, 1), (0, -1)];
