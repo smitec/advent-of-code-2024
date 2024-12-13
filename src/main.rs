@@ -8,7 +8,82 @@ use std::{
 
 use regex::Regex;
 use tracing::{debug, info, instrument};
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, field::debug};
+
+#[instrument(skip(stones))]
+fn split_stones(stones: Vec<u64>, n: u64, target: u64) -> Vec<u64> {
+    debug!("a");
+    let mut next_stones: Vec<u64> = Vec::new();
+    for stone in stones {
+        if n == target {
+            if stone == 0 {
+                next_stones.push(1);
+            } else if stone.to_string().len() % 2 == 0 {
+                let mut stone_string = stone.to_string();
+                let a = stone_string.split_off(stone_string.len() / 2);
+                next_stones.push(stone_string.parse().unwrap());
+                next_stones.push(a.parse().unwrap());
+            } else {
+                next_stones.push(stone * 2024);
+            }
+        } else {
+            if stone == 0 {
+                next_stones.append(&mut split_stones(vec![1], n + 1, target));
+            } else if stone.to_string().len() % 2 == 0 {
+                let mut stone_string = stone.to_string();
+                let a = stone_string.split_off(stone_string.len() / 2);
+                next_stones.append(&mut split_stones(
+                    vec![stone_string.parse().unwrap()],
+                    n + 1,
+                    target,
+                ));
+                next_stones.append(&mut split_stones(vec![a.parse().unwrap()], n + 1, target));
+            } else {
+                next_stones.append(&mut split_stones(vec![stone * 2024], n + 1, target));
+            }
+        }
+    }
+    return next_stones;
+}
+
+#[instrument]
+fn day11(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
+
+    let mut stones: Vec<u64> = content
+        .trim()
+        .split(' ')
+        .map(|x| x.parse().unwrap())
+        .collect();
+
+    for i in 0..25 {
+        let mut next_stones: Vec<u64> = Vec::new();
+
+        for stone in stones {
+            if stone == 0 {
+                next_stones.push(1);
+            } else if stone.to_string().len() % 2 == 0 {
+                let mut stone_string = stone.to_string();
+                let a = stone_string.split_off(stone_string.len() / 2);
+                next_stones.push(stone_string.parse().unwrap());
+                next_stones.push(a.parse().unwrap());
+            } else {
+                next_stones.push(stone * 2024);
+            }
+        }
+
+        stones = next_stones;
+    }
+
+    info!("Final Stones {:?}", stones.len());
+
+    // Maps (current_value, n_steps) -> Number of Stones
+    let mut cache: HashMap<(u64, u64), u64> = HashMap::new();
+    info!(
+        "Final Stones Recursive {:?}",
+        split_stones(stones, 1, 25).len()
+    );
+}
 
 const LURD: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, 1), (0, -1)];
 
@@ -925,8 +1000,11 @@ fn main() {
     println!("day 9");
     day9("./inputs/day9small.txt".to_string());
     day9("./inputs/day9.txt".to_string());
-    */
     println!("day 10");
     day10("./inputs/day10small.txt".to_string());
     day10("./inputs/day10.txt".to_string());
+    */
+    println!("day 11");
+    day11("./inputs/day11small.txt".to_string());
+    day11("./inputs/day11.txt".to_string());
 }
