@@ -8,9 +8,9 @@ use std::{
 
 use regex::Regex;
 use tracing::{debug, info, instrument};
-use tracing_subscriber::{EnvFilter, field::debug};
+use tracing_subscriber::EnvFilter;
 
-#[instrument]
+#[instrument(skip(cache))]
 fn split_stones(stone: u64, n: u64, cache: &mut HashMap<(u64, u64), u64>) -> u64 {
     if n == 0 {
         return 1;
@@ -69,6 +69,12 @@ fn day11(filename: String) {
     // Maps (current_value, n_steps) -> Number of Stones
     let mut cache: HashMap<(u64, u64), u64> = HashMap::new();
     let mut total = 0;
+
+    for i in 0..100 {
+        for j in 1..75 {
+            split_stones(i, j, &mut cache);
+        }
+    }
 
     for stone in &stones {
         total += split_stones(*stone, 75, &mut cache);
