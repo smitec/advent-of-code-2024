@@ -10,6 +10,112 @@ use regex::Regex;
 use tracing::{debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
+#[instrument]
+fn day12(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
+
+    let mut map: HashMap<(i32, i32), char> = HashMap::new();
+    let mut labels: HashMap<(i32, i32), i32> = HashMap::new();
+
+    let mut rows: i32 = 0;
+    let mut cols: i32 = 0;
+
+    for (r, line) in content.lines().enumerate() {
+        rows += 1;
+        cols = line.len() as i32;
+        for (c, char) in line.chars().enumerate() {
+            map.insert((r as i32, c as i32), char);
+        }
+    }
+
+    let mut sizes: HashMap<i32, (i32, i32)> = HashMap::new();
+    let mut label_index: i32 = 0;
+
+    // Two split reigons are not the same reigon
+    for r in 0..rows {
+        for c in 0..cols {
+            let char = map.get(&(r, c)).unwrap();
+            let mut perimiter = 0;
+            let mut label: i32 = *labels.get(&(r, c)).unwrap_or(&label_index);
+            let mut adopted = false;
+
+            for (dr, dc) in LURD {
+                let test = (r + dr, c + dc);
+
+                if let Some(val) = map.get(&test) {
+                    if val != char {
+                        perimiter += 1;
+                    } else {
+                        if let Some(test_label_val) = labels.get(&test) {
+                            let test_val: i32 = *test_label_val;
+                            if label != test_val {
+                                // Adopt the existing label, remap everything else.
+                                debug!(
+                                    "Merging {:?} and {:?} which are both {:?}",
+                                    test_val, label, char
+                                );
+                                adopted = true;
+
+                                let mut to_change: Vec<(i32, i32)> = Vec::new();
+                                for (k, v) in labels.iter() {
+                                    if *v == label {
+                                        to_change.push(*k);
+                                    }
+                                }
+
+                                debug!("Changing {:?} labels", to_change.len());
+                                for k in to_change {
+                                    labels.insert(k, test_val);
+                                }
+
+                                // Get the old sizes and merge into the new
+                                let size_entry = sizes.get(&label).unwrap_or(&(0, 0)).clone();
+                                sizes
+                                    .entry(test_val)
+                                    .and_modify(|x| {
+                                        x.0 += size_entry.0;
+                                        x.1 += size_entry.1;
+                                    })
+                                    .or_insert(size_entry);
+                                sizes.remove(&label);
+
+                                label = test_val;
+                            }
+                        }
+                    }
+                } else {
+                    perimiter += 1;
+                }
+            }
+
+            sizes
+                .entry(label)
+                .and_modify(|x| {
+                    x.0 += 1;
+                    x.1 += perimiter;
+                })
+                .or_insert((1, perimiter));
+
+            labels.insert((r, c), label);
+
+            if !adopted {
+                label_index += 1;
+            }
+        }
+    } // Here
+
+    let mut total = 0;
+    for (char, (area, perimiter)) in sizes.iter() {
+        debug!(
+            "Reigon {:?} area={:?}, perimiter={:?}",
+            char, area, perimiter
+        );
+        total += area * perimiter;
+    }
+
+    info!("Total Fence Cost {:?}", total);
+}
+
 #[instrument(skip(cache))]
 fn split_stones(stone: u64, n: u64, cache: &mut HashMap<(u64, u64), u64>) -> u64 {
     if n == 0 {
@@ -1001,8 +1107,11 @@ fn main() {
     println!("day 10");
     day10("./inputs/day10small.txt".to_string());
     day10("./inputs/day10.txt".to_string());
-    */
     println!("day 11");
     day11("./inputs/day11small.txt".to_string());
     day11("./inputs/day11.txt".to_string());
+    */
+    println!("day 12");
+    day12("./inputs/day12small.txt".to_string());
+    day12("./inputs/day12.txt".to_string());
 }
