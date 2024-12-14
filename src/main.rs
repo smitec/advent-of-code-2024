@@ -10,6 +10,27 @@ use regex::Regex;
 use tracing::{debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
+#[derive(Debug, Clone)]
+enum DirectionType {
+    Vertical,
+    Horizontal,
+}
+
+#[derive(Debug, Clone)]
+struct Edge {
+    pos: (i32, i32),
+    other: i32,
+    direction: DirectionType,
+}
+
+#[derive(Clone)]
+struct GardenEntry {
+    label: char,
+    area: i32,
+    perimiter: i32,
+    edges: Vec<Edge>,
+}
+
 #[instrument]
 fn day12(filename: String) {
     let content = fs::read_to_string(filename).expect("Couldn't read input");
@@ -28,7 +49,7 @@ fn day12(filename: String) {
         }
     }
 
-    let mut sizes: HashMap<i32, (i32, i32)> = HashMap::new();
+    let mut sizes: HashMap<i32, GardenEntry> = HashMap::new();
     let mut label_index: i32 = 0;
 
     // Two split reigons are not the same reigon
@@ -39,12 +60,28 @@ fn day12(filename: String) {
             let mut label: i32 = *labels.get(&(r, c)).unwrap_or(&label_index);
             let mut adopted = false;
 
+            let mut edges: Vec<Edge> = Vec::new();
             for (dr, dc) in LURD {
                 let test = (r + dr, c + dc);
+                let d_type: DirectionType;
+                let other: i32;
+
+                if dr == 0 {
+                    d_type = DirectionType::Vertical;
+                    other = dc;
+                } else {
+                    d_type = DirectionType::Horizontal;
+                    other = dr;
+                }
 
                 if let Some(val) = map.get(&test) {
                     if val != char {
                         perimiter += 1;
+                        edges.push(Edge {
+                            pos: (r, c),
+                            other,
+                            direction: d_type,
+                        });
                     } else {
                         if let Some(test_label_val) = labels.get(&test) {
                             let test_val: i32 = *test_label_val;
@@ -69,12 +106,21 @@ fn day12(filename: String) {
                                 }
 
                                 // Get the old sizes and merge into the new
-                                let size_entry = sizes.get(&label).unwrap_or(&(0, 0)).clone();
+                                let mut size_entry = sizes
+                                    .get(&label)
+                                    .unwrap_or(&GardenEntry {
+                                        label: '#',
+                                        area: 0,
+                                        perimiter: 0,
+                                        edges: Vec::new(),
+                                    })
+                                    .clone();
                                 sizes
                                     .entry(test_val)
                                     .and_modify(|x| {
-                                        x.0 += size_entry.0;
-                                        x.1 += size_entry.1;
+                                        x.area += size_entry.area;
+                                        x.perimiter += size_entry.perimiter;
+                                        x.edges.append(&mut size_entry.edges);
                                     })
                                     .or_insert(size_entry);
                                 sizes.remove(&label);
@@ -85,16 +131,27 @@ fn day12(filename: String) {
                     }
                 } else {
                     perimiter += 1;
+                    edges.push(Edge {
+                        pos: (r, c),
+                        other,
+                        direction: d_type,
+                    });
                 }
             }
 
             sizes
                 .entry(label)
                 .and_modify(|x| {
-                    x.0 += 1;
-                    x.1 += perimiter;
+                    x.area += 1;
+                    x.perimiter += perimiter;
+                    x.edges.append(&mut edges);
                 })
-                .or_insert((1, perimiter));
+                .or_insert(GardenEntry {
+                    label: *char,
+                    area: 1,
+                    perimiter,
+                    edges,
+                });
 
             labels.insert((r, c), label);
 
@@ -102,18 +159,75 @@ fn day12(filename: String) {
                 label_index += 1;
             }
         }
-    } // Here
+    }
 
     let mut total = 0;
-    for (char, (area, perimiter)) in sizes.iter() {
+    for (char, entry) in sizes.iter() {
         debug!(
             "Reigon {:?} area={:?}, perimiter={:?}",
-            char, area, perimiter
+            char, entry.area, entry.perimiter
         );
-        total += area * perimiter;
+        total += entry.area * entry.perimiter;
     }
 
     info!("Total Fence Cost {:?}", total);
+
+    let mut part_b_price = 0;
+
+    for (_, entry) in sizes.iter() {
+        let mut total_edges = 0;
+        debug!("Total Edges To Check {:?}", entry.edges.len());
+        debug!("{:?}", entry.edges);
+        for other in [-1, 1] {
+            // Process Vertial Edges
+            for c in 0..cols {
+                let mut filtered_edges: Vec<&Edge> = entry
+                    .edges
+                    .iter()
+                    .filter(|x| {
+                        (x.pos.1 == c)
+                            && (other == x.other)
+                            && matches!(x.direction, DirectionType::Vertical)
+                    })
+                    .collect();
+                filtered_edges.sort_by(|x, y| x.pos.0.cmp(&y.pos.0));
+                let mut previous_r = -2;
+                for e in filtered_edges {
+                    if e.pos.0 - previous_r > 1 {
+                        total_edges += 1;
+                    }
+                    previous_r = e.pos.0;
+                }
+            }
+            // Process Horizontal Edges
+            for r in 0..rows {
+                let mut filtered_edges: Vec<&Edge> = entry
+                    .edges
+                    .iter()
+                    .filter(|x| {
+                        (x.pos.0 == r)
+                            && (other == x.other)
+                            && matches!(x.direction, DirectionType::Horizontal)
+                    })
+                    .collect();
+                filtered_edges.sort_by(|x, y| x.pos.1.cmp(&y.pos.1));
+                let mut previous_c = -2;
+                for e in filtered_edges {
+                    if e.pos.1 - previous_c > 1 {
+                        total_edges += 1;
+                    }
+                    previous_c = e.pos.1;
+                }
+            }
+        }
+        debug!(
+            "Reigon {:?} area={:?}, total_edges={:?}",
+            entry.label, entry.area, total_edges
+        );
+        part_b_price += total_edges * entry.area;
+    }
+
+    info!("Total Fence Cost B {:?}", part_b_price);
 }
 
 #[instrument(skip(cache))]
