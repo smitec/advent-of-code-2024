@@ -10,6 +10,94 @@ use regex::Regex;
 use tracing::{debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
+struct PrizeMatrix {
+    a_x: i32,
+    a_y: i32,
+    b_x: i32,
+    b_y: i32,
+    p_x: i32,
+    p_y: i32,
+}
+
+#[instrument]
+fn day13(filename: String) {
+    let content = fs::read_to_string(filename).expect("Couldn't read input");
+
+    let mut machine = PrizeMatrix {
+        a_x: 0,
+        a_y: 0,
+        b_x: 0,
+        b_y: 0,
+        p_x: 0,
+        p_y: 0,
+    };
+    let mut machines: Vec<PrizeMatrix> = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        match i % 4 {
+            0 => {
+                // Button A Line
+                let matcher = Regex::new(r#"Button A: X\+([0-9]+), Y\+([0-9]+)"#).unwrap();
+                let captures = matcher.captures(line).unwrap();
+                machine.a_x = captures.get(1).unwrap().as_str().parse().unwrap();
+                machine.a_y = captures.get(2).unwrap().as_str().parse().unwrap();
+            }
+            1 => {
+                // Button B Line
+                let matcher = Regex::new(r#"Button B: X\+([0-9]+), Y\+([0-9]+)"#).unwrap();
+                let captures = matcher.captures(line).unwrap();
+                machine.b_x = captures.get(1).unwrap().as_str().parse().unwrap();
+                machine.b_y = captures.get(2).unwrap().as_str().parse().unwrap();
+            }
+            2 => {
+                // Prize Line
+                let matcher = Regex::new(r#"Prize: X=([0-9]+), Y=([0-9]+)"#).unwrap();
+                let captures = matcher.captures(line).unwrap();
+                machine.p_x = captures.get(1).unwrap().as_str().parse().unwrap();
+                machine.p_y = captures.get(2).unwrap().as_str().parse().unwrap();
+            }
+            3 => {
+                // Blank Line
+                machines.push(machine);
+                machine = PrizeMatrix {
+                    a_x: 0,
+                    a_y: 0,
+                    b_x: 0,
+                    b_y: 0,
+                    p_x: 0,
+                    p_y: 0,
+                };
+            }
+            _ => {}
+        }
+    }
+
+    let mut total = 0;
+    for (_idx, machine) in machines.iter().enumerate() {
+        let det_denom = machine.a_x * machine.b_y - machine.a_y * machine.b_x;
+        if det_denom == 0 {
+            continue;
+        }
+
+        let i = (machine.b_y as f64 * machine.p_x as f64 - machine.b_x as f64 * machine.p_y as f64)
+            / det_denom as f64;
+        let j = (-machine.a_y as f64 * machine.p_x as f64
+            + machine.a_x as f64 * machine.p_y as f64)
+            / det_denom as f64;
+
+        if i < 0.0 || j < 0.0 {
+            continue;
+        }
+
+        debug!("Prize at {:?} {:?}", i, j);
+
+        if i.fract() == 0.0 && j.fract() == 0.0 {
+            total += 3 * (i as i32) + (j as i32);
+        }
+    }
+
+    info!("Total Presses Needed {:?}", total);
+}
+
 #[derive(Debug, Clone)]
 enum DirectionType {
     Vertical,
@@ -1224,8 +1312,11 @@ fn main() {
     println!("day 11");
     day11("./inputs/day11small.txt".to_string());
     day11("./inputs/day11.txt".to_string());
-    */
     println!("day 12");
     day12("./inputs/day12small.txt".to_string());
     day12("./inputs/day12.txt".to_string());
+    */
+    println!("day 13");
+    day13("./inputs/day13small.txt".to_string());
+    day13("./inputs/day13.txt".to_string());
 }
