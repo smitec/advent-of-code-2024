@@ -11,12 +11,12 @@ use tracing::{debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
 struct PrizeMatrix {
-    a_x: i32,
-    a_y: i32,
-    b_x: i32,
-    b_y: i32,
-    p_x: i32,
-    p_y: i32,
+    a_x: i64,
+    a_y: i64,
+    b_x: i64,
+    b_y: i64,
+    p_x: i64,
+    p_y: i64,
 }
 
 #[instrument]
@@ -71,18 +71,35 @@ fn day13(filename: String) {
         }
     }
 
-    let mut total = 0;
+    let mut total: u64 = 0;
     for (_idx, machine) in machines.iter().enumerate() {
         let det_denom = machine.a_x * machine.b_y - machine.a_y * machine.b_x;
         if det_denom == 0 {
             continue;
         }
 
-        let i = (machine.b_y as f64 * machine.p_x as f64 - machine.b_x as f64 * machine.p_y as f64)
+        let mut i: f64 = 0.0;
+        let mut j: f64 = 0.0;
+
+        // Get to 10000000000000 in steps to avoid an overflow
+        /*
+        let i_step = (machine.b_y as f64 * 100000 as f64 - machine.b_x as f64 * 100000 as f64)
             / det_denom as f64;
-        let j = (-machine.a_y as f64 * machine.p_x as f64
-            + machine.a_x as f64 * machine.p_y as f64)
+        let j_step = (-machine.a_y as f64 * 100000 as f64 + machine.a_x as f64 * 100000 as f64)
             / det_denom as f64;
+
+        let add: u64 = 10000000000000 / 100000;
+
+        debug!("Adding {:?} steps of {:?} {:?}", add, i_step, j_step);
+
+        i += add as f64 * i_step;
+        j += add as f64 * j_step;
+        */
+
+        let p_x_a: f64 = (10000000000000.0 + machine.p_x as f64) / det_denom as f64;
+        let p_y_a: f64 = (10000000000000.0 + machine.p_y as f64) / det_denom as f64;
+        i += (machine.b_y as f64 * p_x_a - machine.b_x as f64 * p_y_a);
+        j += (-machine.a_y as f64 * p_x_a + machine.a_x as f64 * p_y_a);
 
         if i < 0.0 || j < 0.0 {
             continue;
@@ -90,8 +107,10 @@ fn day13(filename: String) {
 
         debug!("Prize at {:?} {:?}", i, j);
 
-        if i.fract() == 0.0 && j.fract() == 0.0 {
-            total += 3 * (i as i32) + (j as i32);
+        let i_rem = (i.round() - i).abs();
+        let j_rem = (j.round() - j).abs();
+        if i_rem < 0.001 && j_rem < 0.001 {
+            total += 3 * (i.round() as u64) + (j.round() as u64);
         }
     }
 
