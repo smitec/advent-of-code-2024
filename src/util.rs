@@ -15,6 +15,16 @@ pub enum Rotation {
 }
 
 #[instrument]
+pub fn opposite_direction(direction: &Direction) -> Direction {
+    match direction {
+        Direction::North => Direction::South,
+        Direction::East => Direction::West,
+        Direction::West => Direction::East,
+        Direction::South => Direction::North,
+    }
+}
+
+#[instrument]
 pub fn move_direction(start: &(i32, i32), direction: &Direction) -> (i32, i32) {
     match direction {
         Direction::North => (start.0 - 1, start.1),
