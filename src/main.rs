@@ -20,12 +20,9 @@ pub fn dayxx(filename: String, part_b: bool) -> Result<()> {
     Ok(())
 }
 
-fn can_be_made(target: String, parts: &Vec<String>, cache: &mut HashMap<String, bool>) -> bool {
-    if target.len() == 0 {
-        return true;
-    }
-
+fn can_be_made(target: String, parts: &Vec<String>, cache: &mut HashMap<String, u64>) -> u64 {
     if cache.contains_key(&target) {
+        debug!(cache_size = cache.len(), target = target, "Way Cache Hit");
         return *cache.get(&target).unwrap();
     }
 
@@ -33,32 +30,39 @@ fn can_be_made(target: String, parts: &Vec<String>, cache: &mut HashMap<String, 
     //for split in 1..target.len() {
     let mut to_try: Vec<String> = cache
         .iter()
-        .filter(|&(_, v)| *v)
+        .filter(|&(_, v)| *v > 0)
         .map(|(k, _)| k.clone())
         .collect();
+    to_try.extend(parts.clone());
     to_try.sort_by_key(|x| -(x.len() as i32));
 
-    let mut ways = 0;
-    for part in to_try {
+    let mut ways: u64 = 0;
+    for part in parts.clone() {
         if target.len() >= part.len() {
             let (l, r) = target.split_at(part.len());
             if l == part {
-                debug!(l = l, r = r, cache_size = cache.len(), "Trying");
-                if can_be_made(r.to_string(), parts, cache) {
-                    cache.insert(target, true);
-                    return true;
+                if r.len() == 0 {
+                    debug!(l = l, r = r, cache_size = cache.len(), "Way Found");
+                    ways += 1;
+                } else {
+                    let result = can_be_made(r.to_string(), parts, cache);
+                    if result > 0 {
+                        debug!(
+                            l = l,
+                            r = r,
+                            cache_size = cache.len(),
+                            result = result,
+                            "Way Found"
+                        );
+                        ways += result;
+                    }
                 }
             }
         }
     }
 
-    cache.insert(target.clone(), false);
-    debug!(
-        target = target,
-        cache_size = cache.len(),
-        "adding false to cache"
-    );
-    return false;
+    cache.insert(target.clone(), ways);
+    return ways;
 }
 
 #[instrument]
@@ -68,7 +72,7 @@ pub fn day19(filename: String, part_b: bool) -> Result<()> {
 
     let mut parts: Vec<String> = Vec::new();
     let mut targets: Vec<String> = Vec::new();
-    let mut cache: HashMap<String, bool> = HashMap::new();
+    let mut cache: HashMap<String, u64> = HashMap::new();
 
     for line in content.lines() {
         if line.len() == 0 {
@@ -85,26 +89,21 @@ pub fn day19(filename: String, part_b: bool) -> Result<()> {
 
     parts.sort_by_key(|x| -(x.len() as i32));
 
-    // Pre-Cache
-    for part in parts.clone() {
-        cache.insert(part.clone(), true);
-        for part_2 in parts.clone() {
-            let both: String = format!("{}{}", part, part_2);
-            cache.insert(both, true);
-        }
-    }
-
     let mut total = 0;
+    let mut total_b = 0;
     for target in targets {
-        if can_be_made(target.clone(), &parts, &mut cache) {
-            info!(target = ?target.clone(), cache_size=cache.len(), "Found Match");
+        info!(target = target, "Trying Next");
+        let result = can_be_made(target.clone(), &parts, &mut cache);
+        if result > 0 {
+            info!(target = ?target.clone(), cache_size=cache.len(), result=result, "Found Match");
             total += 1;
+            total_b += result;
         } else {
-            info!(target = ?target.clone(), cache_size=cache.len(), "No Match");
+            info!(target = ?target.clone(), cache_size=cache.len(), result=result, "No Match");
         }
     }
 
-    info!(total = total, "Done");
+    info!(total = total, total_b = total_b, "Done");
 
     Ok(())
 }
