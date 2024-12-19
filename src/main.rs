@@ -3,6 +3,7 @@ use std::{
     fs, io,
 };
 
+use anyhow::{Context, Result};
 use tracing::{Level, debug, error, event, info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -13,103 +14,109 @@ use crate::done::*;
 use crate::util::*;
 
 #[instrument]
-pub fn dayxx(filename: String, part_b: bool) {
-    let content = fs::read_to_string(filename).expect("Couldn't read input");
+pub fn dayxx(filename: String, part_b: bool) -> Result<()> {
+    let content = fs::read_to_string(filename).context("Couldn't read input")?;
+
+    Ok(())
 }
 
-fn display_18_map(map: &HashSet<(i32, i32)>, size: i32) {
-    for r in 0..=size {
-        for c in 0..=size {
-            if map.contains(&(r, c)) {
-                print!("#");
-            } else {
-                print!(".");
+fn can_be_made(target: String, parts: &Vec<String>, cache: &mut HashMap<String, bool>) -> bool {
+    if target.len() == 0 {
+        return true;
+    }
+
+    if cache.contains_key(&target) {
+        return *cache.get(&target).unwrap();
+    }
+
+    // Check for the longest possible substring
+    //for split in 1..target.len() {
+    let mut to_try: Vec<String> = cache
+        .iter()
+        .filter(|&(_, v)| *v)
+        .map(|(k, _)| k.clone())
+        .collect();
+    to_try.sort_by_key(|x| -(x.len() as i32));
+
+    let mut ways = 0;
+    for part in to_try {
+        if target.len() >= part.len() {
+            let (l, r) = target.split_at(part.len());
+            if l == part {
+                debug!(l = l, r = r, cache_size = cache.len(), "Trying");
+                if can_be_made(r.to_string(), parts, cache) {
+                    cache.insert(target, true);
+                    return true;
+                }
             }
         }
-        print!("\n");
     }
+
+    cache.insert(target.clone(), false);
+    debug!(
+        target = target,
+        cache_size = cache.len(),
+        "adding false to cache"
+    );
+    return false;
 }
 
 #[instrument]
-pub fn day18(filename: String, part_b: bool, size: i32, steps: usize, first_jump: i32) {
-    let content = fs::read_to_string(filename).expect("Couldn't read input");
+pub fn day19(filename: String, part_b: bool) -> Result<()> {
+    let content = fs::read_to_string(filename).context("Couldn't read input")?;
+    let mut section_one = true;
 
-    let mut position: (i32, i32) = (0, 0);
-    let mut goal: (i32, i32) = (size, size);
+    let mut parts: Vec<String> = Vec::new();
+    let mut targets: Vec<String> = Vec::new();
+    let mut cache: HashMap<String, bool> = HashMap::new();
 
-    let mut blockers: Vec<(i32, i32)> = Vec::new();
-
-    for (r, line) in content.lines().enumerate() {
-        let (col, row) = line.split_once(',').unwrap();
-        blockers.push((row.parse::<i32>().unwrap(), col.parse::<i32>().unwrap()));
-    }
-
-    let mut steps = steps;
-    let mut jump = first_jump;
-    loop {
-        // Path find on a changing map. Could work with an exhaustive search.
-        let mut front: Vec<((i32, i32), i32)> = Vec::new();
-        let mut scores: HashMap<(i32, i32), i32> = HashMap::new();
-        front.push((position, 0)); // Store position + time
-        scores.insert(position, 0);
-
-        // Simulate X steps
-        let mut map: HashSet<(i32, i32)> = HashSet::new();
-        for t in 0..steps {
-            map.insert(blockers[t]);
+    for line in content.lines() {
+        if line.len() == 0 {
+            section_one = false;
+            continue;
         }
 
-        // display_18_map(&map, size);
-
-        while let Some((pos, distance)) = front.pop() {
-            let mut early = false;
-            for dir in [
-                Direction::North,
-                Direction::South,
-                Direction::East,
-                Direction::West,
-            ] {
-                let test = move_direction(&pos, &dir);
-                if is_in_bounds(size + 1, size + 1, test.0, test.1) && !map.contains(&test) {
-                    let current = scores.get(&test).unwrap_or(&(distance + 2)).clone();
-                    if distance + 1 < current {
-                        front.push((test, distance + 1));
-                        scores.insert(test, distance + 1);
-                        if test == goal {
-                            early = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            if early {
-                break;
-            }
-            front.sort_by_key(|x| x.1);
-        }
-
-        if let None = scores.get(&goal) {
-            if jump > 1 {
-                debug!(steps = jump, "little jump");
-                steps -= 2 * jump as usize;
-                jump = 1;
-            } else {
-                info!(distance = steps, blocker = ?blockers[steps-1], "Finished");
-                break;
-            }
+        if section_one {
+            parts = line.split(", ").map(|x| x.to_string()).collect();
         } else {
-            debug!(steps = steps, "Continuing");
-            steps += jump as usize;
+            targets.push(line.to_string());
         }
     }
+
+    parts.sort_by_key(|x| -(x.len() as i32));
+
+    // Pre-Cache
+    for part in parts.clone() {
+        cache.insert(part.clone(), true);
+        for part_2 in parts.clone() {
+            let both: String = format!("{}{}", part, part_2);
+            cache.insert(both, true);
+        }
+    }
+
+    let mut total = 0;
+    for target in targets {
+        if can_be_made(target.clone(), &parts, &mut cache) {
+            info!(target = ?target.clone(), cache_size=cache.len(), "Found Match");
+            total += 1;
+        } else {
+            info!(target = ?target.clone(), cache_size=cache.len(), "No Match");
+        }
+    }
+
+    info!(total = total, "Done");
+
+    Ok(())
 }
 
-fn main() {
+fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
     info!("Tracing Setup");
 
-    day18("./inputs/day18small.txt".to_string(), false, 6, 12, 1);
-    day18("./inputs/day18.txt".to_string(), false, 70, 1024, 100);
+    day19("./inputs/day19small.txt".to_string(), false).context("Small Example")?;
+    day19("./inputs/day19.txt".to_string(), false).context("Big Example")?;
+
+    Ok(())
 }
