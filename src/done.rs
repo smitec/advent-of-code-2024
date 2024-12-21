@@ -12,6 +12,85 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use tracing::{Level, debug, error, event, info, instrument, warn};
 
+#[instrument]
+pub fn day20(filename: String, part_b: bool) -> Result<()> {
+    let content = fs::read_to_string(filename).context("Couldn't read input")?;
+
+    let mut walls: HashSet<(i32, i32)> = HashSet::new();
+    let mut not_walls: HashSet<(i32, i32)> = HashSet::new();
+    let mut start: (i32, i32) = (0, 0);
+    let mut end: (i32, i32) = (0, 0);
+
+    let mut rows: i32 = 0;
+    let mut cols: i32 = 0;
+
+    let mut wall_list: Vec<(i32, i32)> = Vec::new();
+
+    for (row, line) in content.lines().enumerate() {
+        rows += 1;
+        cols = line.len() as i32;
+        for (col, c) in line.chars().enumerate() {
+            match c {
+                '#' => {
+                    walls.insert((row as i32, col as i32));
+                    wall_list.push((row as i32, col as i32));
+                }
+                'S' => {
+                    start = (row as i32, col as i32);
+                }
+                'E' => {
+                    end = (row as i32, col as i32);
+                }
+                _ => {}
+            };
+        }
+    }
+
+    let original_scores = shortest_distance(start, end, &walls, rows, cols, false, None);
+    let original_scores_reverse = shortest_distance(end, start, &walls, rows, cols, false, None);
+    let original_time = original_scores.get(&end).context("No Path Found")?;
+
+    let mut cheat_routes: HashSet<((i32, i32), (i32, i32))> = HashSet::new();
+
+    let max_d;
+
+    if part_b {
+        max_d = 20;
+    } else {
+        max_d = 2;
+    }
+
+    // Trace the shortest route
+    // For each step, search a manhattan circle of max_d for any spots that save time
+    // Sum them
+    for (point, point_score) in original_scores.iter() {
+        for dr in -max_d..=max_d {
+            for dc in -max_d..=max_d {
+                if ((dr as i32).abs() + (dc as i32).abs() > max_d)
+                    || !is_in_bounds(rows, cols, point.0 + dr, point.1 + dc)
+                    || walls.contains(&(point.0 + dr, point.1 + dc))
+                {
+                    continue;
+                }
+
+                let steps = dr.abs() + dc.abs();
+                let test_point = (point.0 + dr, point.1 + dc);
+                let test_score = original_scores_reverse
+                    .get(&test_point)
+                    .context("No Test Point Score")?;
+                let new_distance = point_score + steps + test_score;
+                if original_time - new_distance >= 100 {
+                    debug!(?point, ?test_point, point_score, steps, "Got One");
+                    cheat_routes.insert((*point, test_point));
+                }
+            }
+        }
+    }
+
+    info!(cheats = cheat_routes.len(), "Done");
+    Ok(())
+}
+
 fn can_be_made(target: String, parts: &Vec<String>, cache: &mut HashMap<String, u64>) -> u64 {
     if cache.contains_key(&target) {
         debug!(cache_size = cache.len(), target = target, "Way Cache Hit");

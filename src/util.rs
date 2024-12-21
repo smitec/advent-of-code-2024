@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use tracing::instrument;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
@@ -83,4 +85,57 @@ pub fn is_in_bounds(rows: i32, cols: i32, row: i32, col: i32) -> bool {
     }
 
     true
+}
+
+pub fn shortest_distance(
+    start: (i32, i32),
+    end: (i32, i32),
+    blockers: &HashSet<(i32, i32)>,
+    rows: i32,
+    cols: i32,
+    shortcut: bool,
+    max_len: Option<i32>,
+) -> HashMap<(i32, i32), i32> {
+    let mut scores: HashMap<(i32, i32), i32> = HashMap::new();
+    let mut front: Vec<((i32, i32), i32)> = Vec::new();
+
+    scores.insert(start, 0);
+    front.push((start, 0));
+
+    while let Some((pos, score)) = front.pop() {
+        if (pos == end) && shortcut {
+            scores.insert(pos, score);
+            return scores;
+        }
+
+        if let Some(x) = max_len {
+            if score > x {
+                continue;
+            }
+        }
+
+        for d in [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ] {
+            let test_pos = move_direction(&pos, &d);
+
+            if !is_in_bounds(rows, cols, test_pos.0, test_pos.1) {
+                continue;
+            }
+
+            if !blockers.contains(&test_pos) {
+                let current_score = scores.get(&test_pos).unwrap_or(&(score + 2)).clone();
+                if score + 1 < current_score {
+                    scores.insert(test_pos, score + 1);
+                    front.push((test_pos, score + 1));
+                }
+            }
+        }
+        front.sort_by_key(|x| -x.1);
+    }
+
+    return scores;
 }

@@ -8,3 +8,4 @@ regex = "*"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["default", "env-filter"] }
 anyhow = "1.0.94"
+itertools = "*"
