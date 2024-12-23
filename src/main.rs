@@ -1,19 +1,14 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs, i32, io,
+    fs,
 };
 
 use anyhow::{Context, Result};
-use itertools::Itertools;
-use rayon::prelude::*;
 use tracing::{Level, debug, error, event, info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 
 mod done;
 mod util;
-
-use crate::done::*;
-use crate::util::*;
 
 #[instrument]
 pub fn dayxx(filename: String, part_b: bool) -> Result<()> {
@@ -22,66 +17,108 @@ pub fn dayxx(filename: String, part_b: bool) -> Result<()> {
     Ok(())
 }
 
-fn process(number: u64) -> u64 {
-    let a = number << 6;
-    let b = (a ^ number) % 16777216; // b is the secret now
-
-    let c = b >> 5;
-    let d = c ^ b; // d is the secret now
-    let e = d % 16777216; // e is the secret now
-
-    let f = e << 11;
-    let g = f ^ e; // g is the secret now
-    let h = g % 16777216;
-
-    return h;
-}
-
 #[instrument]
-pub fn day22(filename: String, part_b: bool, steps: i32) -> Result<()> {
+pub fn day23(filename: String, part_b: bool) -> Result<()> {
     let content = fs::read_to_string(filename).context("Couldn't read input")?;
 
-    let numbers: Vec<u64> = content.lines().map(|x| x.parse().unwrap()).collect();
-    let mut sequences: HashMap<(i8, i8, i8, i8), i32> = HashMap::new();
+    let mut links: HashMap<String, Vec<String>> = HashMap::new();
 
-    let mut sum: u64 = 0;
-    for number in numbers {
-        let mut value = number;
-        let mut changes: Vec<i8> = Vec::new();
-        let mut values: Vec<i8> = Vec::new();
-        let mut last: i8 = 0;
-        for i in 0..steps {
-            value = process(value);
-            if i > 0 {
-                changes.push((value % 10) as i8 - last);
+    content.lines().for_each(|line| {
+        let (l, r) = line.split_once('-').unwrap();
+        links
+            .entry(l.to_string())
+            .and_modify(|e| {
+                e.push(r.to_string());
+            })
+            .or_insert(vec![r.to_string()]);
+        links
+            .entry(r.to_string())
+            .and_modify(|e| {
+                e.push(l.to_string());
+            })
+            .or_insert(vec![l.to_string()]);
+    });
+
+    debug!(len = links.len(), "Links Read");
+
+    let mut max_len = 0;
+    let mut sets: HashSet<(String, String, String)> = HashSet::new();
+    for (key, value) in links.iter() {
+        // The most it could be is all the ones in value. For each of them, check how many contain
+        // each other.
+        let mut values = value.clone();
+        let mut done = false;
+        while !done {
+            done = true;
+            for (i, v) in values.clone().iter().enumerate() {
+                // Does it contain key?
+                let i_list = links.get(v).unwrap_or(&vec![]).clone();
+                if !i_list.contains(key) {
+                    values.remove(i);
+                    done = false;
+                    break;
+                }
+                // Does it contain all the other values?
+                for v_other in values.iter() {
+                    if v_other == v {
+                        continue;
+                    }
+                    if !i_list.contains(v_other) {
+                        values.remove(i);
+                        done = false;
+                        break;
+                    }
+                }
+                if !done {
+                    break;
+                }
             }
-            last = (value % 10) as i8;
-            values.push(last);
         }
-        sum += value;
-        debug!(value = value, "Step");
+        values.push(key.clone());
+        if values.len() > max_len {
+            values.sort();
+            info!(v = values.join(","), "New Max");
+        }
+        max_len = max_len.max(values.len());
 
-        // Store all the 4 step combos and results (once with the earliest ones)
-        let mut seen: HashSet<(i8, i8, i8, i8)> = HashSet::new();
-        for offset in 3..changes.len() {
-            let key_parts = &changes[offset - 3..=offset];
-            let value = values[offset + 1];
-            let key: (i8, i8, i8, i8) = (key_parts[0], key_parts[1], key_parts[2], key_parts[3]);
-            if !seen.contains(&key) {
-                sequences
-                    .entry(key)
-                    .and_modify(|x| {
-                        *x += value as i32;
-                    })
-                    .or_insert(value as i32);
-                seen.insert(key);
+        if key.chars().nth(0).unwrap_or('x') != 't' {
+            continue;
+        }
+
+        debug!(key, ?value, "Checking link");
+
+        // Search the list of connections and list all recipricated connections
+        let reverse_connected: Vec<String> = value
+            .iter()
+            .filter(|&v| {
+                let entry: Vec<String> = links.get(v).unwrap_or(&vec![]).clone();
+                debug!(len = entry.len(), ?entry, "Got Other Links");
+                return entry.contains(key);
+            })
+            .cloned()
+            .collect();
+
+        debug!(len = reverse_connected.len(), "Found Reverse Connections");
+
+        // From the filtered list, find any connected to one another
+        for (i, item_i) in reverse_connected.iter().cloned().enumerate() {
+            let i_list = links.get(&item_i).unwrap_or(&vec![]).clone();
+            for (j, item_j) in reverse_connected.iter().cloned().enumerate() {
+                if i == j {
+                    continue;
+                }
+                let j_list = links.get(&item_j).unwrap_or(&vec![]).clone();
+                if i_list.contains(&item_j) && j_list.contains(&item_i) {
+                    let mut triple = vec![item_i.clone(), item_j.clone(), key.to_string()];
+                    triple.sort();
+
+                    sets.insert((triple[0].clone(), triple[1].clone(), triple[2].clone()));
+                }
             }
         }
     }
 
-    let max_b = sequences.iter().map(|(k, v)| *v).max();
-
-    info!(sum, max_b, "Done");
+    info!(len = sets.len(), max_len, "Done");
 
     Ok(())
 }
@@ -92,12 +129,11 @@ fn main() -> Result<()> {
         .init();
     info!("Tracing Setup");
 
-    day22("./inputs/day22tiny.txt".to_string(), false, 10).context("Small Example")?;
-    day22("./inputs/day22small.txt".to_string(), false, 2000).context("Small Example")?;
-    day22("./inputs/day22.txt".to_string(), false, 2000).context("Big Example")?;
+    day23("./inputs/day23small.txt".to_string(), false).context("Small Example")?;
+    day23("./inputs/day23.txt".to_string(), false).context("Big Example")?;
 
-    // day22("./inputs/day22small.txt".to_string(), true).context("Small Example")?;
-    // day22("./inputs/day22.txt".to_string(), true).context("Big Example")?;
+    day23("./inputs/day23smallb.txt".to_string(), true).context("Small Example")?;
+    day23("./inputs/day23.txt".to_string(), true).context("Big Example")?;
 
     Ok(())
 }
