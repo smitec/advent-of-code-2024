@@ -102,6 +102,27 @@ fn mark_clean(name: String, nodes: &HashMap<String, GateNode>, clean_nodes: &mut
     };
 }
 
+fn eval_z(z_gates: &Vec<String>, gates: &HashMap<String, GateNode>) -> u64 {
+    let mut z_clone = z_gates.clone();
+    z_clone.sort_by_key(|x| {
+        let v: i32 = x[1..].parse().unwrap();
+        return -v;
+    });
+
+    let mut result: u64 = 0;
+    for gate in z_clone.iter().cloned() {
+        result = result << 1;
+        let mut visited: HashSet<String> = HashSet::new();
+        if let Some(x) = eval(gate, &gates, &mut visited) {
+            if x {
+                result += 1;
+            }
+        }
+    }
+
+    return result;
+}
+
 #[instrument]
 pub fn day24(filename: String, part_b: bool) -> Result<()> {
     let content = fs::read_to_string(filename).context("Couldn't read input")?;
@@ -174,22 +195,7 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
         }
     }
 
-    z_gates.sort_by_key(|x| {
-        let v: i32 = x[1..].parse().unwrap();
-        return -v;
-    });
-
-    let mut result: u64 = 0;
-    for gate in z_gates.iter().cloned() {
-        debug!(gate, "Next Z Gate");
-        result = result << 1;
-        let mut visited: HashSet<String> = HashSet::new();
-        if let Some(x) = eval(gate, &gates, &mut visited) {
-            if x {
-                result += 1;
-            }
-        }
-    }
+    let result = eval_z(&z_gates, &gates);
 
     info!(result, "Done");
 
@@ -283,12 +289,28 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
     // Seems like loops are okay, probably needs to be looping up that's bad
     // Probably some way to progressively lock more nodes but not toally sure here
     // Worth a try in the morning
-    let mut gates_current = gates.clone();
+    let mut pairs: Vec<(String, String)> = Vec::new();
 
-    while clean_z != z_gates.len() {
-        for pick in dirty_nodes.iter().permutations(8).unique() {
-            let mut node_clone = gates_current.clone();
-            for i in 0..4 {
+    while pairs.len() < 4 {
+        let mut found = false;
+        for pick in dirty_nodes
+            .iter()
+            .permutations(2 * (4 - pairs.len()))
+            .unique()
+        {
+            let mut node_clone = gates.clone();
+            for pair in pairs.iter().cloned() {
+                let a = pair.0;
+                let b = pair.1;
+
+                let a_v = gates.get(&a).unwrap();
+                let b_v = gates.get(&b).unwrap();
+
+                node_clone.insert(a.to_string(), b_v.clone());
+                node_clone.insert(b.to_string(), a_v.clone());
+            }
+
+            for i in 0..(4 - 2 * pairs.len()) {
                 let a = pick[2 * i];
                 let b = pick[2 * i + 1];
 
@@ -331,11 +353,13 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
                         if x {
                             if val == 1 {
                                 new_clean_z += 1;
+                                new_clean_nodes.insert(node.clone());
                                 mark_clean(node, &node_clone, &mut new_clean_nodes);
                             }
                         } else {
                             if val == 0 {
                                 new_clean_z += 1;
+                                new_clean_nodes.insert(node.clone());
                                 mark_clean(node, &node_clone, &mut new_clean_nodes);
                             }
                         }
@@ -345,6 +369,15 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
                 }
 
                 if new_clean_z > clean_z {
+                    for i in 0..(4 - pairs.len()) {
+                        // Should we save the swap? Yes if both are marked as clean now
+                        let a = pick[2 * i];
+                        let b = pick[2 * i + 1];
+                        if new_clean_nodes.contains(a) && new_clean_nodes.contains(b) {
+                            pairs.push((a.to_string(), b.to_string()));
+                        }
+                    }
+
                     debug!(new_clean_z, clean_z, "Closer");
                     let mut dirty_new: Vec<String> = Vec::new();
                     for (gate, _) in gates.iter() {
@@ -354,10 +387,13 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
                     }
                     dirty_nodes = dirty_new;
                     clean_z = new_clean_z;
-                    gates_current = node_clone;
+                    found = true;
                     break;
                 }
             }
+        }
+        if !found {
+            error!("Ran out of permutations");
         }
     }
 
