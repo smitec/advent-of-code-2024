@@ -4,7 +4,18 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use itertools::{Itertools, Permutations};
+use genetic_algorithm::{
+    crossover::{CrossoverMultiPoint, CrossoverSinglePoint},
+    fitness::{Fitness, FitnessChromosome, FitnessGenotype, FitnessValue},
+    genotype::{Genotype, ListGenotype},
+    mutate::{MutateMultiGene, MutateSingleGene},
+    select::SelectTournament,
+    strategy::{
+        Strategy,
+        evolve::{Evolve, EvolveReporterSimple},
+    },
+};
+use itertools::{Combinations, Itertools, Permutations};
 use tracing::{Level, debug, error, event, info, instrument, warn};
 use tracing_subscriber::{EnvFilter, field::debug};
 
@@ -18,21 +29,21 @@ pub fn dayxx(filename: String, part_b: bool) -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Gate {
     And,
     Or,
     Xor,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct GateConfig {
     left: String,
     right: String,
     op: Gate,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum GateNode {
     Const(bool),
     Gate(GateConfig),
@@ -43,11 +54,9 @@ fn eval(
     nodes: &HashMap<String, GateNode>,
     visited: &mut HashSet<String>,
 ) -> Option<bool> {
-    /*
-        if visited.contains(&name) {
-            return None;
-        }
-    */
+    if visited.contains(&name) {
+        return None;
+    }
 
     visited.insert(name.clone());
 
@@ -58,10 +67,12 @@ fn eval(
         }
         GateNode::Gate(gate_config) => {
             let mut a_clone = visited.clone();
+            a_clone.insert(gate_config.right.clone());
             let a = eval(gate_config.left.clone(), nodes, &mut a_clone);
 
-            let mut b_clone = visited.clone();
-            let b = eval(gate_config.right.clone(), nodes, &mut b_clone);
+            let mut a_clone = visited.clone();
+            a_clone.insert(gate_config.left.clone());
+            let b = eval(gate_config.right.clone(), nodes, &mut a_clone);
 
             if let None = a {
                 return None;
@@ -86,30 +97,14 @@ fn eval(
     };
 }
 
-fn mark_clean(name: String, nodes: &HashMap<String, GateNode>, clean_nodes: &mut HashSet<String>) {
-    let node = nodes.get(&name).unwrap();
-    match node {
-        GateNode::Const(_) => {
-            return;
-        }
-        GateNode::Gate(gate_config) => {
-            clean_nodes.insert(gate_config.left.clone());
-            clean_nodes.insert(gate_config.right.clone());
-
-            mark_clean(gate_config.left.clone(), nodes, clean_nodes);
-            mark_clean(gate_config.right.clone(), nodes, clean_nodes);
-        }
-    };
-}
-
-fn eval_z(z_gates: &Vec<String>, gates: &HashMap<String, GateNode>) -> u64 {
+fn eval_z(z_gates: &Vec<String>, gates: &HashMap<String, GateNode>) -> Option<i64> {
     let mut z_clone = z_gates.clone();
     z_clone.sort_by_key(|x| {
         let v: i32 = x[1..].parse().unwrap();
         return -v;
     });
 
-    let mut result: u64 = 0;
+    let mut result: i64 = 0;
     for gate in z_clone.iter().cloned() {
         result = result << 1;
         let mut visited: HashSet<String> = HashSet::new();
@@ -117,10 +112,66 @@ fn eval_z(z_gates: &Vec<String>, gates: &HashMap<String, GateNode>) -> u64 {
             if x {
                 result += 1;
             }
+        } else {
+            return None;
         }
     }
 
-    return result;
+    return Some(result);
+}
+
+#[derive(Debug, Clone)]
+struct SwapFitness<'a> {
+    gates: &'a HashMap<String, GateNode>,
+    all_gates: &'a Vec<(String, String)>,
+    z_gates: &'a Vec<String>,
+    target: i64,
+}
+impl Fitness for SwapFitness<'_> {
+    type Genotype = ListGenotype;
+
+    fn calculate_for_chromosome(
+        &mut self,
+        chromosome: &FitnessChromosome<Self>,
+        _genotype: &FitnessGenotype<Self>,
+    ) -> Option<FitnessValue> {
+        // Check for overlapping swaps and bail if they exist
+        let indicies: Vec<usize> = chromosome.genes.clone();
+        let swaps: Vec<(String, String)> = indicies
+            .iter()
+            .map(|x| self.all_gates.get(*x).unwrap())
+            .cloned()
+            .collect();
+
+        let mut gate_clone = self.gates.clone();
+        let mut unique: HashSet<String> = HashSet::new();
+        for i in 0..4 {
+            let a = swaps[i].0.clone();
+            let b = swaps[i].1.clone();
+
+            let a_v = self.gates.get(&a).unwrap();
+            let b_v = self.gates.get(&b).unwrap();
+
+            gate_clone.insert(a.clone(), b_v.clone());
+            gate_clone.insert(b.clone(), a_v.clone());
+
+            if unique.contains(&a) || unique.contains(&b) {
+                return None;
+            } else {
+                unique.insert(a);
+                unique.insert(b);
+            }
+        }
+
+        let result = eval_z(self.z_gates, &gate_clone);
+
+        if let Some(x) = result {
+            let diff: i64 = self.target ^ x;
+            return Some((-1 * diff.count_ones() as i32).try_into().unwrap());
+        } else {
+            return None;
+        }
+    }
 }
 
 #[instrument]
@@ -235,166 +286,51 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
 
     debug!(x_val, y_val, target = x_val + y_val, "Target Values");
 
-    // What if we mark all the nodes in the tree of okay binary values as 'clean' to limit the
-    // search space...
+    let all_gates: Vec<String> = gates
+        .keys()
+        .filter(|x| (x.chars().nth(0).unwrap() != 'x') && (x.chars().nth(0).unwrap() != 'y'))
+        .cloned()
+        .collect();
 
-    let mut clean_nodes: HashSet<String> = HashSet::new();
-    clean_nodes.extend(x_gates.clone());
-    clean_nodes.extend(y_gates.clone());
-
-    let target = x_val + y_val;
-    let mut shift = z_gates.len();
-    let mut clean_z = 0;
-
-    debug!("{:b}", target);
-    for node in z_gates.iter().cloned() {
-        let val = (target >> shift - 1) & 1;
-        debug!(val, shift, node, "Checking");
-
-        let mut visited: HashSet<String> = HashSet::new();
-        if let Some(x) = eval(node.clone(), &gates, &mut visited) {
-            if x {
-                if val == 1 {
-                    clean_z += 1;
-                    mark_clean(node, &gates, &mut clean_nodes);
-                }
-            } else {
-                if val == 0 {
-                    clean_z += 1;
-                    mark_clean(node, &gates, &mut clean_nodes);
-                }
-            }
-        }
-
-        shift -= 1;
+    let mut all_pairs: Vec<(String, String)> = Vec::new();
+    for pair in all_gates.iter().combinations(2).unique() {
+        all_pairs.push((pair[0].to_string(), pair[1].to_string()));
     }
 
-    let mut dirty_nodes: Vec<String> = Vec::new();
-    for (gate, _) in gates.iter() {
-        if !clean_nodes.contains(gate) {
-            dirty_nodes.push(gate.to_string());
-        }
-    }
+    let genotype = ListGenotype::builder()
+        .with_genes_size(4)
+        .with_allele_list((0..all_pairs.len()).collect())
+        .build()
+        .unwrap();
 
-    debug!(
-        len = clean_nodes.len(),
-        dirty = dirty_nodes.len(),
-        total = gates.len(),
-        clean_z,
-        "Added Cleaned Nodes"
-    );
+    let fitness = SwapFitness {
+        gates: &gates,
+        all_gates: &all_pairs,
+        z_gates: &z_gates,
+        target: (x_val + y_val) as i64,
+    };
 
-    // Loop through all permutations of the nodes. I have a strong feeling that this could get
-    // fucked by creating loops though
-    // Seems like loops are okay, probably needs to be looping up that's bad
-    // Probably some way to progressively lock more nodes but not toally sure here
-    // Worth a try in the morning
-    let mut pairs: Vec<(String, String)> = Vec::new();
+    let mut evolve = Evolve::builder()
+        .with_genotype(genotype)
+        .with_target_population_size(1000)
+        .with_fitness(fitness)
+        .with_target_fitness_score(0)
+        .with_mutate(MutateSingleGene::new(0.9))
+        .with_crossover(CrossoverSinglePoint::new())
+        .with_select(SelectTournament::new(4, 0.9))
+        .with_reporter(EvolveReporterSimple::new(100))
+        .with_par_fitness(true)
+        .build()
+        .unwrap();
 
-    while pairs.len() < 4 {
-        let mut found = false;
-        for pick in dirty_nodes
-            .iter()
-            .permutations(2 * (4 - pairs.len()))
-            .unique()
-        {
-            let mut node_clone = gates.clone();
-            for pair in pairs.iter().cloned() {
-                let a = pair.0;
-                let b = pair.1;
+    evolve.call();
 
-                let a_v = gates.get(&a).unwrap();
-                let b_v = gates.get(&b).unwrap();
-
-                node_clone.insert(a.to_string(), b_v.clone());
-                node_clone.insert(b.to_string(), a_v.clone());
-            }
-
-            for i in 0..(4 - 2 * pairs.len()) {
-                let a = pick[2 * i];
-                let b = pick[2 * i + 1];
-
-                let a_v = gates.get(a).unwrap();
-                let b_v = gates.get(b).unwrap();
-
-                node_clone.insert(a.to_string(), b_v.clone());
-                node_clone.insert(b.to_string(), a_v.clone());
-            }
-
-            let mut result: u64 = 0;
-            let mut okay = true;
-            for gate in z_gates.iter().cloned() {
-                result = result << 1;
-                let mut visited: HashSet<String> = HashSet::new();
-                if let Some(x) = eval(gate, &node_clone, &mut visited) {
-                    if x {
-                        result += 1;
-                    }
-                } else {
-                    // Found a loop, kill it
-                    okay = false;
-                    break;
-                }
-            }
-
-            if okay {
-                let mut new_clean_nodes: HashSet<String> = HashSet::new();
-                clean_nodes.extend(x_gates.clone());
-                clean_nodes.extend(y_gates.clone());
-
-                let mut shift = z_gates.len();
-                let mut new_clean_z = 0;
-
-                for node in z_gates.iter().cloned() {
-                    let val = (target >> shift - 1) & 1;
-
-                    let mut visited: HashSet<String> = HashSet::new();
-                    if let Some(x) = eval(node.clone(), &node_clone, &mut visited) {
-                        if x {
-                            if val == 1 {
-                                new_clean_z += 1;
-                                new_clean_nodes.insert(node.clone());
-                                mark_clean(node, &node_clone, &mut new_clean_nodes);
-                            }
-                        } else {
-                            if val == 0 {
-                                new_clean_z += 1;
-                                new_clean_nodes.insert(node.clone());
-                                mark_clean(node, &node_clone, &mut new_clean_nodes);
-                            }
-                        }
-                    }
-
-                    shift -= 1;
-                }
-
-                if new_clean_z > clean_z {
-                    for i in 0..(4 - pairs.len()) {
-                        // Should we save the swap? Yes if both are marked as clean now
-                        let a = pick[2 * i];
-                        let b = pick[2 * i + 1];
-                        if new_clean_nodes.contains(a) && new_clean_nodes.contains(b) {
-                            pairs.push((a.to_string(), b.to_string()));
-                        }
-                    }
-
-                    debug!(new_clean_z, clean_z, "Closer");
-                    let mut dirty_new: Vec<String> = Vec::new();
-                    for (gate, _) in gates.iter() {
-                        if !clean_nodes.contains(gate) {
-                            dirty_new.push(gate.to_string());
-                        }
-                    }
-                    dirty_nodes = dirty_new;
-                    clean_z = new_clean_z;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if !found {
-            error!("Ran out of permutations");
-        }
+    if let Some(best_genes) = evolve.best_genes() {
+        let selected_items = best_genes.clone();
+        let swapped = selected_items.iter().map(|x| all_gates.get(*x).unwrap());
+        info!(final=swapped.sorted().join(","), "done");
+    } else {
+        info!("All Garbage");
     }
 
     Ok(())
@@ -406,10 +342,10 @@ fn main() -> Result<()> {
         .init();
     info!("Tracing Setup");
 
-    day24("./inputs/day24small.txt".to_string(), false).context("Small Example")?;
-    /*
-        day24("./inputs/day24.txt".to_string(), false).context("Big Example")?;
+    // day24("./inputs/day24small.txt".to_string(), false).context("Small Example")?;
+    day24("./inputs/day24.txt".to_string(), false).context("Big Example")?;
 
+    /*
         day24("./inputs/day24small.txt".to_string(), true).context("Small Example")?;
         day24("./inputs/day24.txt".to_string(), true).context("Big Example")?;
     */
