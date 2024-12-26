@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -125,7 +126,8 @@ struct SwapFitness<'a> {
     gates: &'a HashMap<String, GateNode>,
     all_gates: &'a Vec<(String, String)>,
     z_gates: &'a Vec<String>,
-    target: i64,
+    x_gates: &'a Vec<String>,
+    y_gates: &'a Vec<String>,
 }
 impl Fitness for SwapFitness<'_> {
     type Genotype = ListGenotype;
@@ -163,14 +165,33 @@ impl Fitness for SwapFitness<'_> {
             }
         }
 
-        let result = eval_z(self.z_gates, &gate_clone);
+        let mut fitness = 0;
+        for x_set in [22344970157743, 28135262594079] {
+            for y_set in [22344970157743, 28135262594079, 0] {
+                let mut tx = x_set;
+                for v in self.x_gates.iter() {
+                    gate_clone.insert(v.to_string(), GateNode::Const((tx & 1) == 1));
+                    tx >>= 1;
+                }
 
-        if let Some(x) = result {
-            let diff: i64 = self.target ^ x;
-            return Some((-1 * diff.count_ones() as i32).try_into().unwrap());
-        } else {
-            return None;
+                let mut ty = y_set;
+                for v in self.y_gates.iter() {
+                    gate_clone.insert(v.to_string(), GateNode::Const((ty & 1) == 1));
+                    ty >>= 1;
+                }
+
+                let result = eval_z(self.z_gates, &gate_clone);
+
+                if let Some(x) = result {
+                    let diff: i64 = (x_set + y_set) ^ x;
+                    fitness += -1 * diff.count_ones() as i32;
+                } else {
+                    return None;
+                }
+            }
         }
+
+        return Some(fitness.try_into().unwrap());
     }
 }
 
@@ -194,10 +215,10 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
         if constants {
             let (l, r) = line.split_once(": ").unwrap();
             gates.insert(l.to_string(), GateNode::Const(r == "1"));
-            if l.chars().nth(0).unwrap() == 'y' {
+            if l.chars().nth(0).unwrap() == 'x' {
                 x_gates.push(l.to_string());
             }
-            if l.chars().nth(0).unwrap() == 'x' {
+            if l.chars().nth(0).unwrap() == 'y' {
                 y_gates.push(l.to_string());
             }
         } else {
@@ -253,38 +274,13 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
     // Part b
     x_gates.sort_by_key(|x| {
         let v: i32 = x[1..].parse().unwrap();
-        return -v;
+        return v;
     });
 
     y_gates.sort_by_key(|x| {
         let v: i32 = x[1..].parse().unwrap();
-        return -v;
+        return v;
     });
-
-    let mut x_val: u64 = 0;
-    let mut y_val: u64 = 0;
-
-    for xgate in x_gates.iter().cloned() {
-        x_val <<= 1;
-        let mut visited: HashSet<String> = HashSet::new();
-        if let Some(x) = eval(xgate, &gates, &mut visited) {
-            if x {
-                x_val += 1;
-            }
-        }
-    }
-
-    for ygate in y_gates.iter().cloned() {
-        y_val <<= 1;
-        let mut visited: HashSet<String> = HashSet::new();
-        if let Some(x) = eval(ygate, &gates, &mut visited) {
-            if x {
-                y_val += 1;
-            }
-        }
-    }
-
-    debug!(x_val, y_val, target = x_val + y_val, "Target Values");
 
     let all_gates: Vec<String> = gates
         .keys()
@@ -307,15 +303,16 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
         gates: &gates,
         all_gates: &all_pairs,
         z_gates: &z_gates,
-        target: (x_val + y_val) as i64,
+        x_gates: &x_gates,
+        y_gates: &y_gates,
     };
 
     let mut evolve = Evolve::builder()
         .with_genotype(genotype)
-        .with_target_population_size(1000)
+        .with_target_population_size(100)
         .with_fitness(fitness)
         .with_target_fitness_score(0)
-        .with_mutate(MutateSingleGene::new(0.9))
+        .with_mutate(MutateSingleGene::new(0.3))
         .with_crossover(CrossoverSinglePoint::new())
         .with_select(SelectTournament::new(4, 0.9))
         .with_reporter(EvolveReporterSimple::new(100))
@@ -327,8 +324,25 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
 
     if let Some(best_genes) = evolve.best_genes() {
         let selected_items = best_genes.clone();
-        let swapped = selected_items.iter().map(|x| all_gates.get(*x).unwrap());
-        info!(final=swapped.sorted().join(","), "done");
+        let mut best: Vec<String> = Vec::new();
+        let mut gate_clone = gates.clone();
+        selected_items.iter().for_each(|x| {
+            let a: (String, String) = all_pairs.get(*x).unwrap().clone();
+            best.push(a.0.clone());
+            best.push(a.1.clone());
+
+            let b = a.1.clone();
+            let a = a.0.clone();
+
+            let a_v = gates.get(&a).unwrap();
+            let b_v = gates.get(&b).unwrap();
+
+            gate_clone.insert(a.clone(), b_v.clone());
+            gate_clone.insert(b.clone(), a_v.clone());
+        });
+
+        let result = eval_z(&z_gates, &gate_clone);
+        info!(final=best.iter().sorted().join(","), result, "done");
     } else {
         info!("All Garbage");
     }
