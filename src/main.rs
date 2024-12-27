@@ -166,15 +166,14 @@ impl Fitness for SwapFitness<'_> {
         }
 
         let mut fitness = 0;
-        for x_set in [22344970157743, 28135262594079] {
-            for y_set in [22344970157743, 28135262594079, 0] {
-                let mut tx = x_set;
-                for v in self.x_gates.iter() {
-                    gate_clone.insert(v.to_string(), GateNode::Const((tx & 1) == 1));
-                    tx >>= 1;
-                }
-
-                let mut ty = y_set;
+        for x_set in [22344970157743] {
+            let mut tx = x_set;
+            for v in self.x_gates.iter() {
+                gate_clone.insert(v.to_string(), GateNode::Const((tx & 1) == 1));
+                tx >>= 1;
+            }
+            for y_set in 0..10 {
+                let mut ty = 1i64 << (2 * y_set);
                 for v in self.y_gates.iter() {
                     gate_clone.insert(v.to_string(), GateNode::Const((ty & 1) == 1));
                     ty >>= 1;
@@ -183,7 +182,7 @@ impl Fitness for SwapFitness<'_> {
                 let result = eval_z(self.z_gates, &gate_clone);
 
                 if let Some(x) = result {
-                    let diff: i64 = (x_set + y_set) ^ x;
+                    let diff: i64 = (x_set + (1i64 << (2 * y_set)) as i64) ^ x;
                     fitness += -1 * diff.count_ones() as i32;
                 } else {
                     return None;
@@ -309,10 +308,10 @@ pub fn day24(filename: String, part_b: bool) -> Result<()> {
 
     let mut evolve = Evolve::builder()
         .with_genotype(genotype)
-        .with_target_population_size(100)
+        .with_target_population_size(32)
         .with_fitness(fitness)
         .with_target_fitness_score(0)
-        .with_mutate(MutateSingleGene::new(0.3))
+        .with_mutate(MutateMultiGene::new(4, 1.0))
         .with_crossover(CrossoverSinglePoint::new())
         .with_select(SelectTournament::new(4, 0.9))
         .with_reporter(EvolveReporterSimple::new(100))
