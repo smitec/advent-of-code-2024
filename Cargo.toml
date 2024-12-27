@@ -11,3 +11,4 @@ anyhow = "1.0.94"
 itertools = "*"
 rayon = "1.10.0"
 genetic_algorithm = "0.17.1"
+reqwest= { version="0.12.11", features = ["default", "blocking"]}
